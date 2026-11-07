@@ -1125,16 +1125,4 @@ fun LiquidTopBar(
 }
 
 // ==========================================
-// 7. DIALOGS & BOTTOM SHEETS (LIQUID GLASS)
-// ==========================================
-
-@Composable
-fun LiquidAlertDialog(
-    onDismissRequest: () -> Unit,
-    title: String,
-    message: String,
-    confirmText: String,
-    onConfirm: () -> Unit,
-    dismissText: String? = null,
-    isDestructive: Boolean = false,
-    content: (@Composable () -> Unit
+// 7. DIALOG
