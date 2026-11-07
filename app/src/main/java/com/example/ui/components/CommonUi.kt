@@ -52,12 +52,6 @@ import com.example.util.PersianNumberHelper
 // 1. LIQUID GLASS CONTAINER & MODIFIER
 // ==========================================
 
-/**
- * LiquidGlass modifier:
- * Applies backdrop blur (RenderEffect on API 31+, fallback translucent),
- * tint, subtle 1dp gradient highlight border (lighter at top, transparent at bottom),
- * and soft ambient drop shadow.
- */
 @Composable
 fun Modifier.liquidGlass(
     shape: Shape = RoundedCornerShape(28.dp),
@@ -101,9 +95,6 @@ fun Modifier.liquidGlass(
         .border(BorderStroke(1.dp, borderBrush), shape = shape)
 }
 
-/**
- * LiquidGlassBox component for floating surfaces
- */
 @Composable
 fun LiquidGlassBox(
     modifier: Modifier = Modifier,
@@ -117,10 +108,6 @@ fun LiquidGlassBox(
     )
 }
 
-/**
- * Interactive Liquid Tap Animation:
- * Smooth scale down to 0.96 and spring back on tap.
- */
 @Composable
 fun Modifier.liquidTapEffect(
     enabled: Boolean = true,
@@ -151,10 +138,6 @@ fun Modifier.liquidTapEffect(
 // 2. SOLID INSET GROUPED LIST & ROWS
 // ==========================================
 
-/**
- * Inset Grouped Solid Card Container:
- * Solid background (#FFFFFF light, #1C1C1E dark) with 24dp squircle corners.
- */
 @Composable
 fun SolidGroupedCard(
     modifier: Modifier = Modifier,
@@ -180,10 +163,6 @@ fun SolidGroupedCard(
     }
 }
 
-/**
- * GroupedRow:
- * Single item in an Inset Grouped Card with optional semantic icon, title, value text, and RTL arrow.
- */
 @Composable
 fun GroupedRow(
     title: String,
@@ -270,7 +249,7 @@ fun GroupedRow(
                     trailingContent()
                 } else if (showArrow && onClick != null) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack, // Mirrored for RTL
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = null,
                         tint = LiquidTheme.textSecondary.copy(alpha = 0.6f),
                         modifier = Modifier.size(16.dp)
@@ -291,10 +270,6 @@ fun GroupedRow(
     }
 }
 
-/**
- * Section Header:
- * 15sp secondary label on start, optional accent action on end.
- */
 @Composable
 fun LiquidSectionHeader(
     title: String,
@@ -337,10 +312,6 @@ fun LiquidSectionHeader(
 // 3. GRADIENT HERO CARDS & CONTENT ROWS
 // ==========================================
 
-/**
- * GradientHeroCard:
- * 28dp squircle, palette gradient, white headline (22-26sp), subtitle and action.
- */
 @Composable
 fun GradientHeroCard(
     title: String,
@@ -416,10 +387,6 @@ fun GradientHeroCard(
     }
 }
 
-/**
- * CircularShortcut:
- * 76dp circle with icon & label below it, fluid spring tap.
- */
 @Composable
 fun CircularShortcut(
     icon: ImageVector,
@@ -460,10 +427,6 @@ fun CircularShortcut(
     }
 }
 
-/**
- * ContentRow:
- * 12dp rounded square (56-64dp) with gradient & icon, title, accent subtitle, trailing action.
- */
 @Composable
 fun ContentRow(
     title: String,
@@ -550,9 +513,6 @@ fun ContentRow(
 // 4. BUTTONS & INPUT FIELDS
 // ==========================================
 
-/**
- * LiquidPrimaryButton: 52dp full pill with accent color
- */
 @Composable
 fun LiquidPrimaryButton(
     text: String,
@@ -594,9 +554,6 @@ fun LiquidPrimaryButton(
     }
 }
 
-/**
- * LiquidSecondaryButton: Pill button with 14% accent tint & accent text
- */
 @Composable
 fun LiquidSecondaryButton(
     text: String,
@@ -636,9 +593,6 @@ fun LiquidSecondaryButton(
     }
 }
 
-/**
- * Liquid Glass Floating Bottom Navigation Bar (72dp capsule, 16dp margin, 5 tabs)
- */
 @Composable
 fun LiquidBottomBar(
     currentRoute: String,
@@ -701,9 +655,6 @@ fun LiquidBottomBar(
     }
 }
 
-/**
- * LiquidDestructiveButton: Red destructive action pill
- */
 @Composable
 fun LiquidDestructiveButton(
     text: String,
@@ -729,9 +680,6 @@ fun LiquidDestructiveButton(
     }
 }
 
-/**
- * LiquidSearchField: 52dp pill, card background, leading search icon
- */
 @Composable
 fun LiquidSearchField(
     value: String,
@@ -801,9 +749,6 @@ fun LiquidSearchField(
     }
 }
 
-/**
- * LiquidInputField: Consistent 52dp card pill text/numeric field
- */
 @Composable
 fun LiquidInputField(
     value: String,
@@ -887,9 +832,6 @@ fun LiquidInputField(
 // 5. CONTROLS (SWITCH, SEGMENT, STEPPER, PROGRESS)
 // ==========================================
 
-/**
- * iOS Style Switch (51 x 31 with white thumb)
- */
 @Composable
 fun LiquidSwitch(
     checked: Boolean,
@@ -923,9 +865,6 @@ fun LiquidSwitch(
     }
 }
 
-/**
- * Liquid Segmented Control with sliding glass pill indicator
- */
 @Composable
 fun LiquidSegmentedControl(
     items: List<String>,
@@ -976,9 +915,6 @@ fun LiquidSegmentedControl(
     }
 }
 
-/**
- * LiquidStepper: Stepper control for numeric adjustments (+ / -)
- */
 @Composable
 fun LiquidStepper(
     value: Double,
@@ -1038,9 +974,6 @@ fun LiquidStepper(
     }
 }
 
-/**
- * Liquid Progress Ring
- */
 @Composable
 fun LiquidProgressRing(
     progressPercent: Int,
@@ -1093,9 +1026,6 @@ fun LiquidProgressRing(
 // 6. TOP BAR & BOTTOM BAR (LIQUID GLASS)
 // ==========================================
 
-/**
- * 44dp circular glass button for top bar
- */
 @Composable
 fun LiquidCircleButton(
     icon: ImageVector,
@@ -1128,9 +1058,6 @@ fun LiquidCircleButton(
     }
 }
 
-/**
- * Compact Inline Liquid Glass Top Bar (Height ~56dp, title 20sp centered)
- */
 @Composable
 fun LiquidTopBar(
     title: String,
@@ -1201,10 +1128,6 @@ fun LiquidTopBar(
 // 7. DIALOGS & BOTTOM SHEETS (LIQUID GLASS)
 // ==========================================
 
-/**
- * Liquid Glass iOS Alert Dialog:
- * Centered, 28dp squircle, 17sp bold title, 13sp body, thin hairline dividers.
- */
 @Composable
 fun LiquidAlertDialog(
     onDismissRequest: () -> Unit,
@@ -1214,434 +1137,4 @@ fun LiquidAlertDialog(
     onConfirm: () -> Unit,
     dismissText: String? = null,
     isDestructive: Boolean = false,
-    content: (@Composable () -> Unit)? = null
-) {
-    Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable { onDismissRequest() },
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(310.dp)
-                    .clickable(enabled = false) {}
-                    .liquidGlass(shape = RoundedCornerShape(28.dp), elevation = 12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = LiquidTheme.textPrimary,
-                            textAlign = TextAlign.Center
-                        )
-                        if (message.isNotBlank()) {
-                            Text(
-                                text = message,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                                color = LiquidTheme.textSecondary,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        if (content != null) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            content()
-                        }
-                    }
-
-                    // Divider
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(0.6.dp)
-                            .background(LiquidTheme.dividerColor)
-                    )
-
-                    // Action buttons
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                    ) {
-                        if (dismissText != null) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clickable { onDismissRequest() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = dismissText,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
-                                    fontWeight = FontWeight.Medium,
-                                    color = LiquidTheme.textSecondary
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .width(0.6.dp)
-                                    .fillMaxHeight()
-                                    .background(LiquidTheme.dividerColor)
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clickable {
-                                    onConfirm()
-                                    onDismissRequest()
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = confirmText,
-                                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
-                                fontWeight = FontWeight.Bold,
-                                color = if (isDestructive) SemanticError else LiquidTheme.accentColor
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Liquid Glass Floating Rest Timer Dock Capsule
- */
-@Composable
-fun LiquidRestTimerDock(
-    remainingSeconds: Int,
-    isActive: Boolean,
-    onAdd15Seconds: () -> Unit,
-    onCancel: () -> Unit,
-    onClickDock: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    AnimatedVisibility(
-        visible = isActive,
-        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-        modifier = modifier
-    ) {
-        LiquidGlassBox(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .clickable { onClickDock() },
-            shape = RoundedCornerShape(26.dp),
-            elevation = 8.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    LiquidProgressRing(
-                        progressPercent = ((remainingSeconds % 60) * 100) / 60,
-                        modifier = Modifier.size(38.dp),
-                        strokeWidth = 4.dp
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Timer,
-                            contentDescription = null,
-                            tint = LiquidTheme.accentColor,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Column {
-                        Text(
-                            text = "استراحت ست فعال",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = LiquidTheme.textSecondary
-                        )
-                        Text(
-                            text = PersianNumberHelper.formatSecondsToTime(remainingSeconds.toLong()),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = LiquidTheme.accentColor
-                        )
-                    }
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .height(34.dp)
-                            .liquidTapEffect { onAdd15Seconds() },
-                        shape = CircleShape,
-                        color = LiquidTheme.accentColor.copy(alpha = 0.16f)
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "+۱۵ث",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = LiquidTheme.accentColor
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = onCancel,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "انصراف",
-                            tint = LiquidTheme.textSecondary
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * EmptyStateCard with Solid Grouped style
- */
-@Composable
-fun EmptyStateCard(
-    icon: ImageVector,
-    title: String,
-    modifier: Modifier = Modifier,
-    description: String? = null,
-    actionButtonText: String? = null,
-    onActionClick: (() -> Unit)? = null
-) {
-    SolidGroupedCard(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(60.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(LiquidTheme.accentColor.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = LiquidTheme.accentColor,
-                    modifier = Modifier.size(30.dp)
-                )
-            }
-
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = LiquidTheme.textPrimary
-            )
-
-            if (!description.isNullOrBlank()) {
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LiquidTheme.textSecondary,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            if (actionButtonText != null && onActionClick != null) {
-                Spacer(modifier = Modifier.height(4.dp))
-                LiquidPrimaryButton(
-                    text = actionButtonText,
-                    onClick = onActionClick,
-                    modifier = Modifier.widthIn(max = 220.dp)
-                )
-            }
-        }
-    }
-}
-
-/**
- * LiquidTimePickerDialog:
- * A modern iOS 27 glass-style time picker dialog with hour/minute steppers and quick time presets.
- */
-@Composable
-fun LiquidTimePickerDialog(
-    initialTime: String,
-    title: String = "انتخاب ساعت اعلان",
-    onDismissRequest: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    val parts = initialTime.split(":").mapNotNull { it.trim().toIntOrNull() }
-    var selectedHour by remember { mutableIntStateOf(parts.getOrElse(0) { 18 }.coerceIn(0, 23)) }
-    var selectedMinute by remember { mutableIntStateOf(parts.getOrElse(1) { 0 }.coerceIn(0, 59)) }
-
-    LiquidAlertDialog(
-        onDismissRequest = onDismissRequest,
-        title = title,
-        confirmText = "تأیید و ذخیره",
-        dismissText = "انصراف",
-        onConfirm = {
-            val formatted = String.format(java.util.Locale.US, "%02d:%02d", selectedHour, selectedMinute)
-            onConfirm(formatted)
-        },
-        content = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Big Display
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    color = LiquidTheme.surfaceElevated
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Hour column
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            IconButton(
-                                onClick = { selectedHour = (selectedHour + 1) % 24 },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش ساعت", tint = LiquidTheme.accentColor)
-                            }
-                            Text(
-                                text = PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%02d", selectedHour)),
-                                style = MaterialTheme.typography.displayMedium.copy(fontSize = 38.sp),
-                                fontWeight = FontWeight.ExtraBold,
-                                color = LiquidTheme.accentColor
-                            )
-                            IconButton(
-                                onClick = { selectedHour = if (selectedHour == 0) 23 else selectedHour - 1 },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش ساعت", tint = LiquidTheme.accentColor)
-                            }
-                            Text("ساعت", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
-                        }
-
-                        Text(
-                            text = ":",
-                            style = MaterialTheme.typography.displayMedium.copy(fontSize = 38.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = LiquidTheme.textSecondary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
-                        )
-
-                        // Minute column
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            IconButton(
-                                onClick = { selectedMinute = (selectedMinute + 5) % 60 },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش دقیقه", tint = LiquidTheme.accentColor)
-                            }
-                            Text(
-                                text = PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%02d", selectedMinute)),
-                                style = MaterialTheme.typography.displayMedium.copy(fontSize = 38.sp),
-                                fontWeight = FontWeight.ExtraBold,
-                                color = LiquidTheme.textPrimary
-                            )
-                            IconButton(
-                                onClick = { selectedMinute = if (selectedMinute < 5) 55 else selectedMinute - 5 },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش دقیقه", tint = LiquidTheme.accentColor)
-                            }
-                            Text("دقیقه", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
-                        }
-                    }
-                }
-
-                // Quick presets
-                Text(
-                    text = "ساعت‌های پیشنهادی سریع:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LiquidTheme.textSecondary,
-                    modifier = Modifier.align(Alignment.Start)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val presets = listOf(
-                        "صبح" to (8 to 0),
-                        "ظهر" to (13 to 0),
-                        "عصر" to (17 to 30),
-                        "شب" to (21 to 0)
-                    )
-                    presets.forEach { (label, time) ->
-                        val isCurr = selectedHour == time.first && selectedMinute == time.second
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(36.dp)
-                                .liquidTapEffect {
-                                    selectedHour = time.first
-                                    selectedMinute = time.second
-                                },
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isCurr) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (isCurr) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isCurr) Color.White else LiquidTheme.textPrimary
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    )
-}
-
+    content: (@Composable () -> Unit
