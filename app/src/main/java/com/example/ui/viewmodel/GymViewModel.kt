@@ -374,13 +374,13 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun restoreFromUri(context: android.content.Context, uri: Uri): Result<Unit> {
         val parseRes = BackupHelper.readBackupFromUri(context, uri)
         if (parseRes.isFailure) return Result.failure(parseRes.exceptionOrNull() ?: Exception("خطا در باز کردن فایل"))
-        return repository.restoreFromJson(parseRes.getOrThrow())
+        return repository.restoreFromJson(parseRes.getOrThrow().json)
     }
 
     suspend fun restoreFromDeviceFile(file: File): Result<Unit> {
         val parseRes = BackupHelper.readBackupFromFile(file)
         if (parseRes.isFailure) return Result.failure(parseRes.exceptionOrNull() ?: Exception("خطا در خواندن فایل"))
-        return repository.restoreFromJson(parseRes.getOrThrow())
+        return repository.restoreFromJson(parseRes.getOrThrow().json)
     }
 
     fun clearAllData() {
