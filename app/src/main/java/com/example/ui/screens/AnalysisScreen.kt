@@ -215,8 +215,66 @@ fun AnalysisScreen(
                     } else {
                         val idealWeightMin = 18.5 * (h / 100.0) * (h / 100.0)
                         val idealWeightMax = 24.9 * (h / 100.0) * (h / 100.0)
-                        val bmr = (10 * w) + (6.25 * h) - (5 * age) + if (gender == "FEMALE") -161 else 5
-                        val tdee = bmr * 1.4
+                        val bmi = w / ((h / 100.0) * (h / 100.0))
+
+                        val bmiStatus = when {
+                            bmi < 18.5 -> "کمبود وزن (لاغر)"
+                            bmi < 25.0 -> "وزن نرمال و ایده‌آل"
+                            bmi < 30.0 -> "دارای اضافه وزن"
+                            else -> "چاقی درجه ۱ یا بالاتر"
+                        }
+
+                        // Mifflin-St Jeor formula (Standard gold standard)
+                        val bmr = (10.0 * w) + (6.25 * h) - (5.0 * age) + if (gender == "FEMALE") -161.0 else 5.0
+
+                        // Physical Activity Level multiplier
+                        val activityMultiplier = when (userSettings.activityLevel) {
+                            "SEDENTARY" -> 1.2
+                            "LIGHT" -> 1.375
+                            "MODERATE" -> 1.55
+                            "ACTIVE" -> 1.725
+                            "VERY_ACTIVE", "ATHLETE" -> 1.9
+                            else -> 1.4
+                        }
+                        val tdee = bmr * activityMultiplier
+
+                        // Target Calories by Goal
+                        val targetCalories = when (userSettings.fitnessGoal) {
+                            "BULK" -> tdee + 400.0
+                            "CUT" -> (tdee - 500.0).coerceAtLeast(bmr)
+                            else -> tdee
+                        }
+
+                        // Estimated Body Fat % (US Navy formula if waist available, otherwise Deurenberg BMI)
+                        val waist = latest?.waistCm
+                        val neck = latest?.neckCm ?: (if (gender == "FEMALE") 33.0 else 38.0)
+                        val bodyFat = if (waist != null && waist > neck) {
+                            if (gender == "FEMALE") {
+                                val hip = latest?.thighCm?.let { it * 1.5 } ?: (waist * 1.15)
+                                (495.0 / (1.29579 - 0.35004 * kotlin.math.log10(waist + hip - neck) + 0.22100 * kotlin.math.log10(h)) - 450.0).coerceIn(12.0, 48.0)
+                            } else {
+                                (495.0 / (1.0324 - 0.19077 * kotlin.math.log10(waist - neck) + 0.15456 * kotlin.math.log10(h)) - 450.0).coerceIn(6.0, 45.0)
+                            }
+                        } else {
+                            val genderFactor = if (gender == "FEMALE") 0.0 else 1.0
+                            ((1.20 * bmi) + (0.23 * age) - (10.8 * genderFactor) - 5.4).coerceIn(7.0, 45.0)
+                        }
+
+                        // FFMI (Fat-Free Mass Index) - The bodybuilder gold standard
+                        val leanMassKg = w * (1.0 - (bodyFat / 100.0))
+                        val ffmi = (leanMassKg / ((h / 100.0) * (h / 100.0))) + 6.1 * (1.8 - (h / 100.0))
+                        val ffmiStatus = when {
+                            ffmi < 18.0 -> "پایین / غیرورزشکار"
+                            ffmi < 20.0 -> "متوسط و طبیعی"
+                            ffmi < 22.0 -> "عضلانی و ورزشکار"
+                            ffmi < 24.5 -> "ورزشکار پیشرفته / نخبه"
+                            else -> "حداکثر پتانسیل ژنتیکی طبیعی"
+                        }
+
+                        // Daily Macronutrients
+                        val targetProtein = (w * 2.1).toInt()
+                        val targetFat = (w * 0.9).toInt()
+                        val targetCarbs = ((targetCalories - (targetProtein * 4 + targetFat * 9)) / 4.0).toInt().coerceAtLeast(80)
 
                         Column(
                             modifier = Modifier
@@ -224,66 +282,175 @@ fun AnalysisScreen(
                                 .padding(horizontal = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            // Ideal weight card
+                            // Card 1: BMI & Ideal Weight
                             SolidGroupedCard {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(20.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text("بازه وزن ایده‌آل و سلامت شما", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
+                                    Text("شاخص توده بدنی (BMI) و وضعیت وزن", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
+                                    Row(
+                                        verticalAlignment = Alignment.Bottom,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%.1f", bmi)),
+                                            style = MaterialTheme.typography.displayMedium.copy(fontSize = 36.sp),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = LiquidTheme.accentColor
+                                        )
+                                        Text(
+                                            text = "• $bmiStatus",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (bmi in 18.5..24.9) SemanticIconGreen else SemanticIconOrange,
+                                            modifier = Modifier.padding(bottom = 6.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "${PersianNumberHelper.toPersianDigits(String.format("%.1f", idealWeightMin))} تا ${PersianNumberHelper.toPersianDigits(String.format("%.1f", idealWeightMax))} kg",
-                                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 34.sp),
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = LiquidTheme.accentColor
-                                    )
-                                    Text(
-                                        text = "بر اساس قد ${PersianNumberHelper.toPersianDigits(h)} سانتی‌متر و استاندارد شاخص توده بدنی (BMI ۱۸.۵ تا ۲۴.۹)",
+                                        text = "محدوده وزن ایده‌آل سلامت: ${PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%.1f", idealWeightMin))} تا ${PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%.1f", idealWeightMax))} کیلوگرم",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = LiquidTheme.textSecondary
                                     )
                                 }
                             }
 
-                            // BMR & TDEE Card
+                            // Card 2: BMR & TDEE
                             SolidGroupedCard {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(20.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Text("سوخت‌وساز پایه روزانه (BMR)", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
+                                    Text("سوخت‌وساز پایه روزانه (BMR میفلین-سنت جور)", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
                                     Text(
                                         text = "${PersianNumberHelper.toPersianDigits(bmr.toInt())} kcal",
-                                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 34.sp),
+                                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp),
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SemanticIconOrange
                                     )
                                     Text(
-                                        text = "کالری لازم برای حفظ حیات بدن بدون احتساب فعالیت فیزیکی",
+                                        text = "کالری مورد نیاز بیولوژیک برای حفظ حیات بدون احتساب فعالیت فیزیکی",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = LiquidTheme.textSecondary
                                     )
 
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
                                     Box(modifier = Modifier.fillMaxWidth().height(0.6.dp).background(LiquidTheme.dividerColor))
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
 
-                                    Text("کالری مصرفی کل با فعالیت ورزشی (TDEE)", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
+                                    Text("کالری مصرفی کل با ضریب فعالیت (TDEE)", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
                                     Text(
                                         text = "${PersianNumberHelper.toPersianDigits(tdee.toInt())} kcal",
-                                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 34.sp),
+                                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp),
                                         fontWeight = FontWeight.ExtraBold,
                                         color = SemanticIconGreen
                                     )
                                     Text(
-                                        text = "میزان کالری مصرفی تخمینی روزانه با سطح فعالیت شما",
+                                        text = "کالری هدف روزانه برای هدف شما (${if (userSettings.fitnessGoal == "BULK") "افزایش حجم" else if (userSettings.fitnessGoal == "CUT") "کات و چربی‌سوزی" else "تثبیت"}): ${PersianNumberHelper.toPersianDigits(targetCalories.toInt())} کیلوکالری",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = LiquidTheme.textSecondary
+                                        fontWeight = FontWeight.Bold,
+                                        color = LiquidTheme.accentColor
                                     )
+                                }
+                            }
+
+                            // Card 3: Body Fat & FFMI
+                            SolidGroupedCard {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text("ترکیب بدنی و آنالیز عضلانی (Body Fat & FFMI)", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text("درصد چربی تقریبی", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                                            Text(
+                                                text = "${PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%.1f", bodyFat))}٪",
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = LiquidTheme.textPrimary
+                                            )
+                                        }
+
+                                        Column {
+                                            Text("شاخص توده بدون چربی (FFMI)", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                                            Text(
+                                                text = PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%.1f", ffmi)),
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = LiquidTheme.accentColor
+                                            )
+                                        }
+                                    }
+
+                                    Text(
+                                        text = "وضعیت عضلانی FFMI: $ffmiStatus",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SemanticIconCyan
+                                    )
+                                }
+                            }
+
+                            // Card 4: Daily Macros Breakdown
+                            SolidGroupedCard {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text("درشت‌مغذی‌های پیشنهادی روزانه", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("پروتئین", style = MaterialTheme.typography.labelSmall, color = SemanticIconRed)
+                                            Text(
+                                                text = "${PersianNumberHelper.toPersianDigits(targetProtein)}g",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = LiquidTheme.textPrimary
+                                            )
+                                            Text("۲.۱g به ازای وزن", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                                        }
+
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("کربوهیدرات", style = MaterialTheme.typography.labelSmall, color = SemanticIconOrange)
+                                            Text(
+                                                text = "${PersianNumberHelper.toPersianDigits(targetCarbs)}g",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = LiquidTheme.textPrimary
+                                            )
+                                            Text("منبع انرژی تمرین", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                                        }
+
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("چربی سالم", style = MaterialTheme.typography.labelSmall, color = SemanticIconGreen)
+                                            Text(
+                                                text = "${PersianNumberHelper.toPersianDigits(targetFat)}g",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = LiquidTheme.textPrimary
+                                            )
+                                            Text("تنظیم هورمونی", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                                        }
+                                    }
                                 }
                             }
                         }

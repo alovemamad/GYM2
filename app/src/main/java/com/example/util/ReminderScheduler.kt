@@ -52,6 +52,18 @@ object ReminderScheduler {
         setAlarmSafely(alarmManager, calendar.timeInMillis, pendingIntent)
     }
 
+    fun scheduleSupplementItemReminder(context: Context, supplementId: Long, timeStr: String, name: String, dosage: String) {
+        val reminderId = 2000 + (supplementId % 1000).toInt()
+        val title = "یادآور مصرف مکمل: $name"
+        val message = "زمان مصرف دوز $dosage از مکمل $name فرا رسیده است."
+        scheduleDailyReminder(context, reminderId, timeStr, title, message)
+    }
+
+    fun cancelSupplementItemReminder(context: Context, supplementId: Long) {
+        val reminderId = 2000 + (supplementId % 1000).toInt()
+        cancelReminder(context, reminderId)
+    }
+
     fun scheduleRestTimer(context: Context, durationSeconds: Long) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val triggerTime = System.currentTimeMillis() + (durationSeconds * 1000)

@@ -253,31 +253,34 @@ class MainActivity : ComponentActivity() {
                                             onUndoSkip = { planId, origDate -> gymViewModel.undoSkip(planId, origDate) },
                                             onDeleteHistory = { hId -> gymViewModel.deleteHistory(hId) },
                                             onImportPlanJson = { json ->
-                                                val parseRes = PlanShareHelper.parsePlanFromJson(json)
-                                                if (parseRes.isSuccess) {
-                                                    val data = parseRes.getOrNull()!!
+                                                val parseRes = PlanShareHelper.parsePlansFromJson(json)
+                                                if (parseRes.isSuccess && !parseRes.getOrNull().isNullOrEmpty()) {
+                                                    val plansList = parseRes.getOrNull()!!
                                                     coroutineScope.launch {
-                                                        val p = WorkoutPlan(
-                                                            name = data.name,
-                                                            notes = data.notes,
-                                                            scheduledDay = data.scheduledDay
-                                                        )
-                                                        val exList = data.exercises.map { e ->
-                                                            WorkoutExercise(
-                                                                planId = 0,
-                                                                name = e.name,
-                                                                sets = e.sets,
-                                                                reps = e.reps,
-                                                                repsMax = e.repsMax,
-                                                                weight = e.weight,
-                                                                notes = e.notes,
-                                                                supersetGroup = e.supersetGroup,
-                                                                isTimedExercise = e.isTimedExercise,
-                                                                customMetrics = e.customMetrics
+                                                        plansList.forEach { data ->
+                                                            val p = WorkoutPlan(
+                                                                name = data.name,
+                                                                notes = data.notes,
+                                                                scheduledDay = data.scheduledDay
                                                             )
+                                                            val exList = data.exercises.map { e ->
+                                                                WorkoutExercise(
+                                                                    planId = 0,
+                                                                    name = e.name,
+                                                                    sets = e.sets,
+                                                                    reps = e.reps,
+                                                                    repsMax = e.repsMax,
+                                                                    weight = e.weight,
+                                                                    notes = e.notes,
+                                                                    supersetGroup = e.supersetGroup,
+                                                                    isTimedExercise = e.isTimedExercise,
+                                                                    customMetrics = e.customMetrics
+                                                                )
+                                                            }
+                                                            gymViewModel.repository.savePlanWithExercises(p, exList)
                                                         }
-                                                        gymViewModel.repository.savePlanWithExercises(p, exList)
-                                                        Toast.makeText(context, "برنامه با موفقیت اضافه شد!", Toast.LENGTH_SHORT).show()
+                                                        val countStr = PersianNumberHelper.toPersianDigits(plansList.size)
+                                                        Toast.makeText(context, "$countStr برنامه تمرینی با موفقیت اضافه شد!", Toast.LENGTH_SHORT).show()
                                                     }
                                                 } else {
                                                     Toast.makeText(context, "فرمت فایل یا کد JSON نامعتبر است.", Toast.LENGTH_LONG).show()
@@ -342,7 +345,8 @@ class MainActivity : ComponentActivity() {
                                             onRestoreBackupJson = { json -> gymViewModel.restoreDataJson(json) },
                                             onGetAiPrompt = { gymViewModel.getAiExportPrompt() },
                                             onClearAllData = { gymViewModel.clearAllData() },
-                                            onOpenOnboarding = { isShowingOnboarding = true }
+                                            onOpenOnboarding = { isShowingOnboarding = true },
+                                            onUpdateProfilePhoto = { photo -> gymViewModel.updateProfilePhoto(photo) }
                                         )
                                     }
                                 }

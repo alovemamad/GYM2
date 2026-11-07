@@ -55,6 +55,7 @@ fun NutritionScreen(
     var showSupplementDialog by remember { mutableStateOf(false) }
     var showIntakeHistoryDialog by remember { mutableStateOf(false) }
     var supplementToDelete by remember { mutableStateOf<Supplement?>(null) }
+    var showCalendarPickerDialog by remember { mutableStateOf(false) }
 
     val todayGregorian = remember { JalaliCalendar.getTodayGregorian() }
 
@@ -116,25 +117,66 @@ fun NutritionScreen(
             )
         }
 
-        // 2. Jalali Date Chips Selector
+        // 2. Jalali Date Chips Selector (Extended 60-day window with Jump Picker)
         item {
             val daysList = remember {
                 val cal = java.util.Calendar.getInstance()
-                cal.add(java.util.Calendar.DAY_OF_YEAR, -5)
+                cal.add(java.util.Calendar.DAY_OF_YEAR, -45)
                 val list = mutableListOf<String>()
                 val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                for (i in 0..10) {
+                for (i in 0..60) {
                     list.add(sdf.format(cal.time))
                     cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
                 }
                 list
             }
+            val initialIndex = remember(selectedDateGregorian) {
+                val idx = daysList.indexOf(selectedDateGregorian)
+                if (idx >= 0) (idx - 2).coerceAtLeast(0) else 43
+            }
+            val rowState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
 
-            LazyRow(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = JalaliCalendar.formatGregorianToPersian(selectedDateGregorian),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = LiquidTheme.textPrimary
+                    )
+                    Surface(
+                        modifier = Modifier
+                            .height(34.dp)
+                            .liquidTapEffect { showCalendarPickerDialog = true },
+                        shape = RoundedCornerShape(10.dp),
+                        color = LiquidTheme.surfaceElevated
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = LiquidTheme.accentColor, modifier = Modifier.size(16.dp))
+                            Text("تقویم ماهانه", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
+                        }
+                    }
+                }
+
+                LazyRow(
+                    state = rowState,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                 items(daysList) { gDate ->
                     val isSelected = gDate == selectedDateGregorian
                     val isToday = gDate == todayGregorian
@@ -177,6 +219,7 @@ fun NutritionScreen(
                     }
                 }
             }
+        }
         }
 
         // 3. Segmented Control
@@ -479,7 +522,9 @@ fun NutritionScreen(
                 }
             },
             content = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                var showPickerForSupplement by remember { mutableStateOf(false) }
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     LiquidInputField(
                         value = sName,
                         onValueChange = { sName = it },
@@ -490,15 +535,63 @@ fun NutritionScreen(
                         onValueChange = { sDosage = it },
                         label = "دوز مصرفی (مثلاً ۵ گرم، ۱ پیمانه)"
                     )
-                    LiquidInputField(
-                        value = sTime,
-                        onValueChange = { sTime = it },
-                        label = "ساعت یادآوری (HH:mm)"
-                    )
+
+                    // Touchable Glass Time Selector
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("ساعت یادآور مصرف روزانه:", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .liquidTapEffect { showPickerForSupplement = true },
+                            shape = RoundedCornerShape(14.dp),
+                            color = LiquidTheme.surfaceElevated
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(Icons.Filled.AccessTime, contentDescription = null, tint = LiquidTheme.accentColor, modifier = Modifier.size(20.dp))
+                                    Text(
+                                        text = PersianNumberHelper.toPersianDigits(sTime),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = LiquidTheme.textPrimary
+                                    )
+                                }
+                                Text(
+                                    text = "تغییر ساعت",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LiquidTheme.accentColor
+                                )
+                            }
+                        }
+                    }
+
                     LiquidInputField(
                         value = sNotes,
                         onValueChange = { sNotes = it },
                         label = "یادداشت و نحوه مصرف"
+                    )
+                }
+
+                if (showPickerForSupplement) {
+                    LiquidTimePickerDialog(
+                        initialTime = sTime,
+                        title = "تنظیم ساعت یادآور مکمل",
+                        onDismissRequest = { showPickerForSupplement = false },
+                        onConfirm = { picked ->
+                            sTime = picked
+                            showPickerForSupplement = false
+                        }
                     )
                 }
             }
@@ -526,6 +619,91 @@ fun NutritionScreen(
                                 showArrow = false,
                                 showDivider = true
                             )
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    // Jalali Month & Day Jump Dialog
+    if (showCalendarPickerDialog) {
+        val currentJalali = remember(selectedDateGregorian) { JalaliCalendar.gregorianToJalali(selectedDateGregorian) }
+        var pickedYear by remember { mutableIntStateOf(currentJalali.year) }
+        var pickedMonth by remember { mutableIntStateOf(currentJalali.month) }
+        var pickedDay by remember { mutableIntStateOf(currentJalali.day) }
+
+        LiquidAlertDialog(
+            onDismissRequest = { showCalendarPickerDialog = false },
+            title = "انتخاب تاریخ شمسی",
+            message = "برای مشاهده یا ثبت وعده‌ها و مکمل‌های روزهای دیگر، تاریخ مورد نظر را انتخاب کنید:",
+            confirmText = "مشاهده این تاریخ",
+            dismissText = "انصراف",
+            onConfirm = {
+                val gDate = JalaliCalendar.jalaliToGregorian(pickedYear, pickedMonth, pickedDay)
+                onSelectDate(gDate)
+                showCalendarPickerDialog = false
+            },
+            content = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Month selector row
+                    Text("ماه:", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        itemsIndexed(JalaliCalendar.MONTH_NAMES) { index, mName ->
+                            val mNum = index + 1
+                            val isSel = pickedMonth == mNum
+                            Surface(
+                                modifier = Modifier
+                                    .height(34.dp)
+                                    .liquidTapEffect {
+                                        pickedMonth = mNum
+                                        if (mNum > 6 && pickedDay > 30) pickedDay = 30
+                                        if (mNum == 12 && pickedDay > 29) pickedDay = 29
+                                    },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
+                            ) {
+                                Box(modifier = Modifier.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = mName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSel) Color.White else LiquidTheme.textPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Day selector row
+                    val maxDays = when {
+                        pickedMonth <= 6 -> 31
+                        pickedMonth <= 11 -> 30
+                        else -> 29
+                    }
+                    Text("روز (${PersianNumberHelper.toPersianDigits(pickedDay)}):", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items((1..maxDays).toList()) { d ->
+                            val isSel = pickedDay == d
+                            Surface(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .liquidTapEffect { pickedDay = d },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = PersianNumberHelper.toPersianDigits(d),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSel) Color.White else LiquidTheme.textPrimary
+                                    )
+                                }
+                            }
                         }
                     }
                 }

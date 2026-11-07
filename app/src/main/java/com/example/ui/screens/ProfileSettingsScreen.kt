@@ -41,6 +41,7 @@ import com.example.data.local.UserSettings
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.util.BackupHelper
+import com.example.util.ImageStorageHelper
 import com.example.util.NotificationHelper
 import com.example.util.PersianNumberHelper
 import kotlinx.coroutines.launch
@@ -57,7 +58,8 @@ fun ProfileSettingsScreen(
     onRestoreBackupJson: suspend (String) -> Result<Unit>,
     onGetAiPrompt: suspend () -> String,
     onClearAllData: () -> Unit,
-    onOpenOnboarding: () -> Unit
+    onOpenOnboarding: () -> Unit,
+    onUpdateProfilePhoto: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -117,6 +119,18 @@ fun ProfileSettingsScreen(
                     Toast.makeText(context, "فرمت فایل نامعتبر است.", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    var timePickerTarget by remember { mutableStateOf<String?>(null) } // "WORKOUT", "WATER", "SUPPLEMENT"
+
+    val avatarPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val permanentPath = ImageStorageHelper.saveProfilePhotoPermanently(context, uri)
+            onUpdateProfilePhoto(permanentPath)
+            Toast.makeText(context, "عکس پروفایل با موفقیت بروز شد.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -297,11 +311,12 @@ fun ProfileSettingsScreen(
                         SolidGroupedCard {
                             GroupedRow(
                                 title = "یادآور تمرین ورزشی",
-                                subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.workoutReminderTime)}",
+                                subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.workoutReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.FitnessCenter,
                                 iconTint = SemanticIconRed,
-                                showArrow = false,
+                                showArrow = true,
                                 showDivider = true,
+                                onClick = { timePickerTarget = "WORKOUT" },
                                 trailingContent = {
                                     LiquidSwitch(
                                         checked = userSettings.workoutReminderEnabled,
@@ -317,11 +332,12 @@ fun ProfileSettingsScreen(
 
                             GroupedRow(
                                 title = "یادآور نوشیدن آب",
-                                subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.waterReminderTime)}",
+                                subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.waterReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.WaterDrop,
                                 iconTint = SemanticIconCyan,
-                                showArrow = false,
+                                showArrow = true,
                                 showDivider = true,
+                                onClick = { timePickerTarget = "WATER" },
                                 trailingContent = {
                                     LiquidSwitch(
                                         checked = userSettings.waterReminderEnabled,
@@ -337,11 +353,12 @@ fun ProfileSettingsScreen(
 
                             GroupedRow(
                                 title = "یادآور مصرف مکمل‌ها",
-                                subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.supplementReminderTime)}",
+                                subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.supplementReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.Medication,
                                 iconTint = SemanticIconGreen,
-                                showArrow = false,
+                                showArrow = true,
                                 showDivider = false,
+                                onClick = { timePickerTarget = "SUPPLEMENT" },
                                 trailingContent = {
                                     LiquidSwitch(
                                         checked = userSettings.supplementReminderEnabled,
@@ -419,7 +436,8 @@ fun ProfileSettingsScreen(
                                         modifier = Modifier
                                             .size(68.dp)
                                             .clip(CircleShape)
-                                            .background(LiquidTheme.surfaceElevated),
+                                            .background(LiquidTheme.surfaceElevated)
+                                            .clickable { avatarPickerLauncher.launch("image/*") },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         if (userSettings.profilePhotoUri.isNotBlank()) {
@@ -435,6 +453,23 @@ fun ProfileSettingsScreen(
                                                 contentDescription = null,
                                                 tint = LiquidTheme.accentColor,
                                                 modifier = Modifier.size(36.dp)
+                                            )
+                                        }
+
+                                        // Camera edit badge
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .size(22.dp)
+                                                .clip(CircleShape)
+                                                .background(LiquidTheme.accentColor),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.CameraAlt,
+                                                contentDescription = "تغییر عکس",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(12.dp)
                                             )
                                         }
                                     }
@@ -825,6 +860,35 @@ fun ProfileSettingsScreen(
                         }
                     }
                 }
+            }
+        )
+    }
+
+    if (timePickerTarget != null) {
+        val currTarget = timePickerTarget!!
+        val currTime = when (currTarget) {
+            "WORKOUT" -> userSettings.workoutReminderTime
+            "WATER" -> userSettings.waterReminderTime
+            else -> userSettings.supplementReminderTime
+        }
+        val currTitle = when (currTarget) {
+            "WORKOUT" -> "ساعت یادآور تمرین"
+            "WATER" -> "ساعت یادآور آب"
+            else -> "ساعت یادآور مکمل‌ها"
+        }
+        val isEnabled = when (currTarget) {
+            "WORKOUT" -> userSettings.workoutReminderEnabled
+            "WATER" -> userSettings.waterReminderEnabled
+            else -> userSettings.supplementReminderEnabled
+        }
+        LiquidTimePickerDialog(
+            initialTime = currTime,
+            title = currTitle,
+            onDismissRequest = { timePickerTarget = null },
+            onConfirm = { newTime ->
+                onToggleReminder(currTarget, isEnabled, newTime)
+                timePickerTarget = null
+                Toast.makeText(context, "ساعت اعلان با موفقیت تنظیم شد: ${PersianNumberHelper.toPersianDigits(newTime)}", Toast.LENGTH_SHORT).show()
             }
         )
     }

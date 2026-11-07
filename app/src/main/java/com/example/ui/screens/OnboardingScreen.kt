@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -27,6 +28,7 @@ import coil.compose.AsyncImage
 import com.example.data.local.UserSettings
 import com.example.ui.components.*
 import com.example.ui.theme.LiquidTheme
+import com.example.util.ImageStorageHelper
 
 @Composable
 fun OnboardingScreen(
@@ -47,11 +49,12 @@ fun OnboardingScreen(
     var waterGoalText by remember { mutableStateOf(currentSettings.waterGoalMl.toString()) }
     var weightUnit by remember { mutableStateOf(currentSettings.weightUnit) }
 
+    val context = LocalContext.current
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            photoUri = uri.toString()
+            photoUri = ImageStorageHelper.saveProfilePhotoPermanently(context, uri)
         }
     }
 

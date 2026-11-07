@@ -273,8 +273,10 @@ class GymRepository(
     suspend fun restoreFromJson(backupJson: String): Result<Unit> {
         val result = BackupHelper.validateAndParseBackup(backupJson)
         if (result.isFailure) return Result.failure(result.exceptionOrNull()!!)
+        return restoreFromContainer(result.getOrNull()!!)
+    }
 
-        val data: BackupContainer = result.getOrNull()!!
+    suspend fun restoreFromContainer(data: BackupContainer): Result<Unit> {
 
         // Clear existing tables
         workoutDao.clearAllSetLogs()

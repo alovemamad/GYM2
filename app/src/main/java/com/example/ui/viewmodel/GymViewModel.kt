@@ -154,6 +154,13 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateProfilePhoto(photoUri: String) {
+        viewModelScope.launch {
+            val current = userSettings.value
+            repository.updateSettings(current.copy(profilePhotoUri = photoUri))
+        }
+    }
+
     fun setTheme(theme: String) {
         viewModelScope.launch {
             repository.setTheme(theme)

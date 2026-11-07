@@ -1498,3 +1498,150 @@ fun EmptyStateCard(
         }
     }
 }
+
+/**
+ * LiquidTimePickerDialog:
+ * A modern iOS 27 glass-style time picker dialog with hour/minute steppers and quick time presets.
+ */
+@Composable
+fun LiquidTimePickerDialog(
+    initialTime: String,
+    title: String = "انتخاب ساعت اعلان",
+    onDismissRequest: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    val parts = initialTime.split(":").mapNotNull { it.trim().toIntOrNull() }
+    var selectedHour by remember { mutableIntStateOf(parts.getOrElse(0) { 18 }.coerceIn(0, 23)) }
+    var selectedMinute by remember { mutableIntStateOf(parts.getOrElse(1) { 0 }.coerceIn(0, 59)) }
+
+    LiquidAlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = title,
+        confirmText = "تأیید و ذخیره",
+        dismissText = "انصراف",
+        onConfirm = {
+            val formatted = String.format(java.util.Locale.US, "%02d:%02d", selectedHour, selectedMinute)
+            onConfirm(formatted)
+        },
+        content = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Big Display
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = LiquidTheme.surfaceElevated
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Hour column
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(
+                                onClick = { selectedHour = (selectedHour + 1) % 24 },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش ساعت", tint = LiquidTheme.accentColor)
+                            }
+                            Text(
+                                text = PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%02d", selectedHour)),
+                                style = MaterialTheme.typography.displayMedium.copy(fontSize = 38.sp),
+                                fontWeight = FontWeight.ExtraBold,
+                                color = LiquidTheme.accentColor
+                            )
+                            IconButton(
+                                onClick = { selectedHour = if (selectedHour == 0) 23 else selectedHour - 1 },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش ساعت", tint = LiquidTheme.accentColor)
+                            }
+                            Text("ساعت", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                        }
+
+                        Text(
+                            text = ":",
+                            style = MaterialTheme.typography.displayMedium.copy(fontSize = 38.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = LiquidTheme.textSecondary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
+                        )
+
+                        // Minute column
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(
+                                onClick = { selectedMinute = (selectedMinute + 5) % 60 },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش دقیقه", tint = LiquidTheme.accentColor)
+                            }
+                            Text(
+                                text = PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%02d", selectedMinute)),
+                                style = MaterialTheme.typography.displayMedium.copy(fontSize = 38.sp),
+                                fontWeight = FontWeight.ExtraBold,
+                                color = LiquidTheme.textPrimary
+                            )
+                            IconButton(
+                                onClick = { selectedMinute = if (selectedMinute < 5) 55 else selectedMinute - 5 },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش دقیقه", tint = LiquidTheme.accentColor)
+                            }
+                            Text("دقیقه", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                        }
+                    }
+                }
+
+                // Quick presets
+                Text(
+                    text = "ساعت‌های پیشنهادی سریع:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LiquidTheme.textSecondary,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val presets = listOf(
+                        "صبح" to (8 to 0),
+                        "ظهر" to (13 to 0),
+                        "عصر" to (17 to 30),
+                        "شب" to (21 to 0)
+                    )
+                    presets.forEach { (label, time) ->
+                        val isCurr = selectedHour == time.first && selectedMinute == time.second
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp)
+                                .liquidTapEffect {
+                                    selectedHour = time.first
+                                    selectedMinute = time.second
+                                },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isCurr) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (isCurr) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isCurr) Color.White else LiquidTheme.textPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+

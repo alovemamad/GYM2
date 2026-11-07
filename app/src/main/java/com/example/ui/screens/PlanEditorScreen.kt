@@ -1,10 +1,13 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -297,6 +300,18 @@ fun PlanEditorScreen(
                                     }
                                 }
 
+                                // Duplicate / Clone
+                                IconButton(
+                                    onClick = {
+                                        val list = exercises.toMutableList()
+                                        list.add(index + 1, exercise.copy(name = if (exercise.name.isNotBlank()) "${exercise.name} (کپی)" else ""))
+                                        exercises = list
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Filled.ContentCopy, contentDescription = "تکثیر حرکت", tint = LiquidTheme.accentColor, modifier = Modifier.size(17.dp))
+                                }
+
                                 // Delete
                                 IconButton(
                                     onClick = {
@@ -573,8 +588,164 @@ fun PlanEditorScreen(
                 }
             }
 
+            // Quick Exercise Suggestions
             item {
-                Spacer(modifier = Modifier.height(8.dp))
+                var selectedMuscleGroup by remember { mutableStateOf("سینه") }
+                val presetsMap = remember {
+                    mapOf(
+                        "سینه" to listOf("پرس سینه با هالتر", "بالاسینه با دمبل", "قفسه سینه دمبل", "شنا سوئدی", "پارالل سینه"),
+                        "زیربغل" to listOf("زیربغل سیم‌کش از جلو", "بارفیکس", "زیربغل هالتر خم", "قایقی سیم‌کش", "ددلیفت"),
+                        "سرشانه" to listOf("پرس سرشانه دمبل", "نشر از جانب", "نشر خم سیم‌کش", "فیس پول", "کول هالتر"),
+                        "بازو" to listOf("جلو بازو هالتر", "جلو بازو دمبل", "پشت بازو سیم‌کش طناب", "پشت بازو دیپ", "جلو بازو چکشی"),
+                        "پا" to listOf("اسکات با هالتر", "پرس پا دستگاه", "جلو پا ماشین", "پشت پا خوابیده", "ساق پا ایستاده"),
+                        "شکم" to listOf("پلانک شکم", "کرانچ روی تشک", "زیرشکم خلبانی", "چرخش روسی")
+                    )
+                }
+
+                SolidGroupedCard(shape = RoundedCornerShape(18.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "💡 افزودن سریع حرکات پیشنهادی",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = LiquidTheme.textPrimary
+                            )
+                            Text(
+                                text = "برای افزودن لمس کنید",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LiquidTheme.textSecondary
+                            )
+                        }
+
+                        // Category tabs
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            presetsMap.keys.forEach { muscle ->
+                                val isSelected = selectedMuscleGroup == muscle
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(30.dp)
+                                        .liquidTapEffect { selectedMuscleGroup = muscle },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = muscle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) Color.White else LiquidTheme.textPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Exercise chips for selected category
+                        val currentList = presetsMap[selectedMuscleGroup] ?: emptyList()
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(currentList) { exName ->
+                                Surface(
+                                    modifier = Modifier
+                                        .liquidTapEffect {
+                                            val isTimed = exName.contains("پلانک")
+                                            exercises = exercises + WorkoutExercise(
+                                                planId = initialPlan?.id ?: 0,
+                                                name = exName,
+                                                sets = if (isTimed) 3 else 4,
+                                                reps = if (isTimed) 60 else 10,
+                                                weight = if (isTimed) 0.0 else 20.0,
+                                                isTimedExercise = isTimed
+                                            )
+                                        },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = LiquidTheme.surfaceElevated,
+                                    border = BorderStroke(0.5.dp, LiquidTheme.dividerColor)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Add,
+                                            contentDescription = null,
+                                            tint = LiquidTheme.accentColor,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Text(
+                                            text = exName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Medium,
+                                            color = LiquidTheme.textPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Prominent Full-Width Add Exercise Button
+            item {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .liquidTapEffect {
+                            exercises = exercises + WorkoutExercise(
+                                planId = initialPlan?.id ?: 0,
+                                name = "",
+                                sets = 3,
+                                reps = 10,
+                                weight = 0.0
+                            )
+                        },
+                    shape = RoundedCornerShape(18.dp),
+                    color = LiquidTheme.accentColor.copy(alpha = 0.12f),
+                    border = BorderStroke(1.5.dp, LiquidTheme.accentColor.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp, horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AddCircle,
+                            contentDescription = null,
+                            tint = LiquidTheme.accentColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "+ افزودن حرکت جدید به این برنامه (حرکت ${PersianNumberHelper.toPersianDigits(exercises.size + 1)})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = LiquidTheme.accentColor
+                        )
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(4.dp))
                 LiquidPrimaryButton(
                     text = "ذخیره تغییرات برنامه",
                     onClick = {
