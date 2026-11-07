@@ -250,11 +250,10 @@ fun WorkoutsScreen(
                                         }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
-            }
 
                 // Section: Other plans
                 if (otherPlans.isNotEmpty()) {
@@ -348,14 +347,13 @@ fun WorkoutsScreen(
                                         }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
-        }
-    } else {
-        // History Tab
+        } else {
+            // History Tab
             if (groupedHistories.isEmpty()) {
                 item {
                     EmptyStateCard(
