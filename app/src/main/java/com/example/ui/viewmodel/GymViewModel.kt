@@ -372,15 +372,23 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun restoreFromUri(context: android.content.Context, uri: Uri): Result<Unit> {
-        val parseRes = BackupHelper.readBackupFromUri(context, uri)
-        if (parseRes.isFailure) return Result.failure(parseRes.exceptionOrNull() ?: Exception("خطا در باز کردن فایل"))
-        return repository.restoreFromJson(parseRes.getOrThrow().json)
+        return try {
+            val jsonString = context.contentResolver.openInputStream(uri)?.use { stream ->
+                stream.bufferedReader().readText()
+            } ?: return Result.failure(Exception("امکان باز کردن فایل وجود ندارد"))
+            repository.restoreFromJson(jsonString)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun restoreFromDeviceFile(file: File): Result<Unit> {
-        val parseRes = BackupHelper.readBackupFromFile(file)
-        if (parseRes.isFailure) return Result.failure(parseRes.exceptionOrNull() ?: Exception("خطا در خواندن فایل"))
-        return repository.restoreFromJson(parseRes.getOrThrow().json)
+        return try {
+            val jsonString = file.readText()
+            repository.restoreFromJson(jsonString)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     fun clearAllData() {
