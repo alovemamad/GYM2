@@ -29,13 +29,11 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          # فایل رو با اسمی که توی build.gradle پیش‌فرضه می‌سازیم
           echo "$KEYSTORE_BASE64" | base64 --decode > $GITHUB_WORKSPACE/my-upload-key.jks
           echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/my-upload-key.jks" >> $GITHUB_ENV
 
       - name: Build Release APK
         env:
-          # اسم متغیرها دقیقا مطابق فایل build.gradle شماست
           STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease
