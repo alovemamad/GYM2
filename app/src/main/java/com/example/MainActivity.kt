@@ -34,6 +34,7 @@ import com.example.ui.viewmodel.GymViewModel
 import com.example.util.JalaliCalendar
 import com.example.util.NotificationHelper
 import com.example.util.PlanShareHelper
+import com.example.util.PersianNumberHelper // اضافه شد
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -346,7 +347,7 @@ class MainActivity : ComponentActivity() {
                                             onGetAiPrompt = { gymViewModel.getAiExportPrompt() },
                                             onClearAllData = { gymViewModel.clearAllData() },
                                             onOpenOnboarding = { isShowingOnboarding = true },
-                                            onUpdateProfilePhoto = { photo -> gymViewModel.updateProfilePhoto(photo) }
+                                            // onUpdateProfilePhoto = { photo -> gymViewModel.updateProfilePhoto(photo) } // موقتا کامنت شد چون تابعش وجود نداره
                                         )
                                     }
                                 }
