@@ -1,0 +1,6 @@
+{
+  "name": "GYM : مربی و دفترچه‌ی هوشمند بدنسازی و تغذیه",
+  "description": "مربی و دفترچه‌ی هوشمند بدنسازی و تغذیه آفلاین به زبان فارسی و تقویم شمسی",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
