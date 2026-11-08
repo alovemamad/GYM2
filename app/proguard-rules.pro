@@ -19,3 +19,12 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# --- GYM: قوانین اضافه برای نسخه release (R8) ---
+# مدل‌های Moshi (کدجنریشن) و JSON پشتیبان/اشتراک برنامه
+-keep class com.example.data.local.** { *; }
+-keep class com.example.util.PlanShareHelper$* { *; }
+-keepclassmembers class * {
+    @com.squareup.moshi.* <methods>;
+}
+-dontwarn org.slf4j.**
