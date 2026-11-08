@@ -20,11 +20,9 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import com.example.ui.components.LiquidGlassRoot
 
 /**
  * رنگ متن/آیکون خوانا روی یک پس‌زمینه: سفید یا مشکی، هرکدام کنتراست بیشتری دارد.
- * (روی accentهای روشن مثل طلایی و سایبر، متن سفید خوانا نیست.)
  */
 fun onColorFor(background: Color): Color {
     val l = background.luminance()
@@ -182,7 +180,7 @@ fun GymTheme(
             colorScheme = colorScheme,
             typography = AppTypography,
             shapes = Shapes(extraSmall = RoundedCornerShape(16.dp)),
-            content = { LiquidGlassRoot(content) }
+            content = content // 👈 اینجا اصلاح شد
         )
     }
 }
