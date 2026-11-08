@@ -129,6 +129,7 @@ object NotificationHelper {
 
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification)
+            .setColor(0xFFD90D3C.toInt())
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
