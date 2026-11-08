@@ -17,6 +17,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable // 👈 اضافه شد
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -36,7 +37,7 @@ import com.example.ui.viewmodel.GymViewModel
 import com.example.util.JalaliCalendar
 import com.example.util.NotificationHelper
 import com.example.util.PlanShareHelper
-import com.example.util.PersianNumberHelper // اضافه شد
+import com.example.util.PersianNumberHelper
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
