@@ -35,12 +35,13 @@ import com.example.ui.theme.*
 import com.example.util.JalaliCalendar
 import com.example.util.PersianNumberHelper
 
-// ایمپورت‌های مورد نیاز برای نمودار
+// ایمپورت‌های مورد نیاز برای نمودار و رنگ‌ها
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.graphics.toArgb // 👈 این خط اضافه شد
 
 @Composable
 fun AnalysisScreen(
