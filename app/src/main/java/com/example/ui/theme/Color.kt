@@ -22,6 +22,15 @@ val DarkDivider = Color(0xFF38383A)
 val DarkTextPrimary = Color(0xFFFFFFFF)
 val DarkTextSecondary = Color(0xFF8E8E93)
 
+// --- Glass / Control Tokens ---
+val GlassBaseDark = Color(0xFF141416)
+val GlassBaseLight = Color(0xFFF9F9FC)
+val SwitchTrackOff = Color(0xFF787880)
+
+// --- Brand Colors (social icons) ---
+val BrandTelegram = Color(0xFF29B6F6)
+val BrandInstagram = Color(0xFFE1306C)
+
 // --- Fixed Semantic Status Colors ---
 val SemanticSuccess = Color(0xFF34C759)
 val SemanticWarning = Color(0xFFFF9500)

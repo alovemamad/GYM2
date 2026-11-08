@@ -16,9 +16,21 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+
+/**
+ * رنگ متن/آیکون خوانا روی یک پس‌زمینه: سفید یا مشکی، هرکدام کنتراست بیشتری دارد.
+ * (روی accentهای روشن مثل طلایی و سایبر، متن سفید خوانا نیست.)
+ */
+fun onColorFor(background: Color): Color {
+    val l = background.luminance()
+    val whiteContrast = 1.05f / (l + 0.05f)
+    val darkContrast = (l + 0.05f) / 0.0556f
+    return if (whiteContrast >= darkContrast) Color.White else Color(0xFF111113)
+}
 
 val LocalLiquidPalette = compositionLocalOf { LiquidPalettes.SPORT_RED }
 val LocalIsDarkTheme = compositionLocalOf { true }
@@ -38,6 +50,11 @@ object LiquidTheme {
         @Composable
         @ReadOnlyComposable
         get() = palette.getAccent(isDark)
+
+    val onAccent: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = onColorFor(accentColor)
 
     val cardGradient: Brush
         @Composable
