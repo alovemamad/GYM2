@@ -115,7 +115,7 @@ fun AnalysisScreen(
                                     GroupedRow(
                                         title = "وزن کل بدن",
                                         icon = Icons.Filled.FitnessCenter,
-                                        iconTint = SemanticIconOrange,
+                                        iconTint = LiquidTheme.iconOrange,
                                         valueText = if (currentWeight != null) "${PersianNumberHelper.toPersianDigits(currentWeight)} ${userSettings.weightUnit}" else "وارد نشده",
                                         showDivider = true,
                                         showArrow = false
@@ -124,7 +124,7 @@ fun AnalysisScreen(
                                     GroupedRow(
                                         title = "دور کمر",
                                         icon = Icons.Filled.Straighten,
-                                        iconTint = SemanticIconCyan,
+                                        iconTint = LiquidTheme.iconCyan,
                                         valueText = if (latest?.waistCm != null) "${PersianNumberHelper.toPersianDigits(latest.waistCm)} cm" else "وارد نشده",
                                         showDivider = true,
                                         showArrow = false
@@ -133,7 +133,7 @@ fun AnalysisScreen(
                                     GroupedRow(
                                         title = "دور بازو",
                                         icon = Icons.Filled.FitnessCenter,
-                                        iconTint = SemanticIconRed,
+                                        iconTint = LiquidTheme.iconRed,
                                         valueText = if (latest?.armsCm != null) "${PersianNumberHelper.toPersianDigits(latest.armsCm)} cm" else "وارد نشده",
                                         showDivider = true,
                                         showArrow = false
@@ -142,7 +142,7 @@ fun AnalysisScreen(
                                     GroupedRow(
                                         title = "دور سینه",
                                         icon = Icons.Filled.Accessibility,
-                                        iconTint = SemanticIconIndigo,
+                                        iconTint = LiquidTheme.iconIndigo,
                                         valueText = if (latest?.chestCm != null) "${PersianNumberHelper.toPersianDigits(latest.chestCm)} cm" else "وارد نشده",
                                         showDivider = true,
                                         showArrow = false
@@ -151,7 +151,7 @@ fun AnalysisScreen(
                                     GroupedRow(
                                         title = "دور ران",
                                         icon = Icons.Filled.DirectionsRun,
-                                        iconTint = SemanticIconGreen,
+                                        iconTint = LiquidTheme.iconGreen,
                                         valueText = if (latest?.thighCm != null) "${PersianNumberHelper.toPersianDigits(latest.thighCm)} cm" else "وارد نشده",
                                         showDivider = false,
                                         showArrow = false
@@ -314,7 +314,7 @@ fun AnalysisScreen(
                                             text = "• $bmiStatus",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (bmi in 18.5..24.9) SemanticIconGreen else SemanticIconOrange,
+                                            color = if (bmi in 18.5..24.9) SemanticSuccess else SemanticWarning,
                                             modifier = Modifier.padding(bottom = 6.dp)
                                         )
                                     }
@@ -341,7 +341,7 @@ fun AnalysisScreen(
                                         text = "${PersianNumberHelper.toPersianDigits(bmr.toInt())} kcal",
                                         style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp),
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = SemanticIconOrange
+                                        color = LiquidTheme.iconOrange
                                     )
                                     Text(
                                         text = "کالری مورد نیاز بیولوژیک برای حفظ حیات بدون احتساب فعالیت فیزیکی",
@@ -358,7 +358,7 @@ fun AnalysisScreen(
                                         text = "${PersianNumberHelper.toPersianDigits(tdee.toInt())} kcal",
                                         style = MaterialTheme.typography.displayMedium.copy(fontSize = 32.sp),
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = SemanticIconGreen
+                                        color = LiquidTheme.iconGreen
                                     )
                                     Text(
                                         text = "کالری هدف روزانه برای هدف شما (${if (userSettings.fitnessGoal == "BULK") "افزایش حجم" else if (userSettings.fitnessGoal == "CUT") "کات و چربی‌سوزی" else "تثبیت"}): ${PersianNumberHelper.toPersianDigits(targetCalories.toInt())} کیلوکالری",
@@ -408,7 +408,7 @@ fun AnalysisScreen(
                                         text = "وضعیت عضلانی FFMI: $ffmiStatus",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = SemanticIconCyan
+                                        color = LiquidTheme.iconCyan
                                     )
                                 }
                             }
@@ -428,7 +428,7 @@ fun AnalysisScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("پروتئین", style = MaterialTheme.typography.labelSmall, color = SemanticIconRed)
+                                            Text("پروتئین", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.iconRed)
                                             Text(
                                                 text = "${PersianNumberHelper.toPersianDigits(targetProtein)}g",
                                                 style = MaterialTheme.typography.titleLarge,
@@ -439,7 +439,7 @@ fun AnalysisScreen(
                                         }
 
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("کربوهیدرات", style = MaterialTheme.typography.labelSmall, color = SemanticIconOrange)
+                                            Text("کربوهیدرات", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.iconOrange)
                                             Text(
                                                 text = "${PersianNumberHelper.toPersianDigits(targetCarbs)}g",
                                                 style = MaterialTheme.typography.titleLarge,
@@ -450,7 +450,7 @@ fun AnalysisScreen(
                                         }
 
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("چربی سالم", style = MaterialTheme.typography.labelSmall, color = SemanticIconGreen)
+                                            Text("چربی سالم", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.iconGreen)
                                             Text(
                                                 text = "${PersianNumberHelper.toPersianDigits(targetFat)}g",
                                                 style = MaterialTheme.typography.titleLarge,

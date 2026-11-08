@@ -391,7 +391,7 @@ fun NutritionScreen(
                                             title = sup.name,
                                             subtitle = "دوز: ${sup.dosage} • ساعت یادآور: ${PersianNumberHelper.toPersianDigits(sup.reminderTime)}",
                                             icon = Icons.Filled.Medication,
-                                            iconTint = if (sup.isActive) SemanticIconGreen else LiquidTheme.textSecondary,
+                                            iconTint = if (sup.isActive) LiquidTheme.iconGreen else LiquidTheme.textSecondary,
                                             showArrow = false,
                                             showDivider = index < allSupplements.size - 1,
                                             onClick = {
@@ -469,7 +469,7 @@ fun NutritionScreen(
                                 GroupedRow(
                                     title = "پروتئین روزانه",
                                     icon = Icons.Filled.FitnessCenter,
-                                    iconTint = SemanticIconRed,
+                                    iconTint = LiquidTheme.iconRed,
                                     valueText = "${PersianNumberHelper.toPersianDigits(targetProteinGrams.toInt())} گرم",
                                     subtitle = "۲ تا ۲.۳ گرم به ازای هر کیلوگرم وزن بدن",
                                     showDivider = true,
@@ -479,7 +479,7 @@ fun NutritionScreen(
                                 GroupedRow(
                                     title = "کربوهیدرات پیچیده",
                                     icon = Icons.Filled.Grain,
-                                    iconTint = SemanticIconOrange,
+                                    iconTint = LiquidTheme.iconOrange,
                                     valueText = "${PersianNumberHelper.toPersianDigits(targetCarbsGrams.toInt())} گرم",
                                     subtitle = "سوخت اصلی تمرینات قدرتی",
                                     showDivider = true,
@@ -489,7 +489,7 @@ fun NutritionScreen(
                                 GroupedRow(
                                     title = "چربی‌های مفید",
                                     icon = Icons.Filled.Opacity,
-                                    iconTint = SemanticIconCyan,
+                                    iconTint = LiquidTheme.iconCyan,
                                     valueText = "${PersianNumberHelper.toPersianDigits(targetFatGrams.toInt())} گرم",
                                     subtitle = "تنظیم هورمون‌ها و سلامت مفاصل",
                                     showDivider = false,

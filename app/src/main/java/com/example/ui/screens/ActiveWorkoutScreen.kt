@@ -138,10 +138,10 @@ fun ActiveWorkoutScreen(
                                 modifier = Modifier
                                     .size(38.dp)
                                     .clip(CircleShape)
-                                    .background(SemanticIconOrange.copy(alpha = 0.15f)),
+                                    .background(LiquidTheme.iconOrange.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.Timer, contentDescription = null, tint = SemanticIconOrange, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Filled.Timer, contentDescription = null, tint = LiquidTheme.iconOrange, modifier = Modifier.size(20.dp))
                             }
                             Column {
                                 Text("مدت تمرین", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
@@ -176,10 +176,10 @@ fun ActiveWorkoutScreen(
                                 modifier = Modifier
                                     .size(38.dp)
                                     .clip(CircleShape)
-                                    .background(SemanticIconGreen.copy(alpha = 0.15f)),
+                                    .background(LiquidTheme.iconGreen.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Filled.FitnessCenter, contentDescription = null, tint = SemanticIconGreen, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Filled.FitnessCenter, contentDescription = null, tint = LiquidTheme.iconGreen, modifier = Modifier.size(20.dp))
                             }
                             Column {
                                 Text("ست‌های انجام‌شده", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
@@ -254,7 +254,7 @@ fun ActiveWorkoutScreen(
                                         Text(
                                             text = "حرکت زمان‌دار • تایمر معکوس و آلارم هوشمند",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = SemanticIconOrange,
+                                            color = LiquidTheme.iconOrange,
                                             fontWeight = FontWeight.Medium
                                         )
                                     } else if (exState.exercise.repsMax != null && exState.exercise.repsMax > exState.exercise.reps) {
@@ -384,7 +384,7 @@ fun ActiveWorkoutScreen(
                                             text = "${PersianNumberHelper.toPersianDigits(setLog.timerSecondsRemaining)} ثانیه",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (setLog.isTimerActive) SemanticIconOrange else LiquidTheme.textPrimary
+                                            color = if (setLog.isTimerActive) LiquidTheme.iconOrange else LiquidTheme.textPrimary
                                         )
                                     }
 
@@ -400,7 +400,7 @@ fun ActiveWorkoutScreen(
                                                 .liquidTapEffect {
                                                     viewModel.toggleExerciseTimer(exIndex, setIndex)
                                                 },
-                                            color = if (setLog.isTimerActive) SemanticIconOrange else LiquidTheme.surfaceSolid
+                                            color = if (setLog.isTimerActive) LiquidTheme.iconOrange else LiquidTheme.surfaceSolid
                                         ) {
                                             Row(
                                                 modifier = Modifier.padding(horizontal = 10.dp),
@@ -410,14 +410,14 @@ fun ActiveWorkoutScreen(
                                                 Icon(
                                                     imageVector = if (setLog.isTimerActive) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                                     contentDescription = "شروع تایمر",
-                                                    tint = if (setLog.isTimerActive) onColorFor(SemanticIconOrange) else LiquidTheme.accentColor,
+                                                    tint = if (setLog.isTimerActive) onColorFor(LiquidTheme.iconOrange) else LiquidTheme.accentColor,
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Text(
                                                     text = if (setLog.isTimerActive) "توقف" else "شروع",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = if (setLog.isTimerActive) onColorFor(SemanticIconOrange) else LiquidTheme.accentColor
+                                                    color = if (setLog.isTimerActive) onColorFor(LiquidTheme.iconOrange) else LiquidTheme.accentColor
                                                 )
                                             }
                                         }

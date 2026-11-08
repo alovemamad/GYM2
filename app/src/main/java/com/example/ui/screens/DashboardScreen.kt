@@ -404,7 +404,7 @@ fun DashboardScreen(
                         CircularShortcut(
                             icon = Icons.Filled.Straighten,
                             label = "ثبت سایز",
-                            iconTint = SemanticIconOrange,
+                            iconTint = LiquidTheme.iconOrange,
                             onClick = onNavigateToAnalysis
                         )
                     }
@@ -412,7 +412,7 @@ fun DashboardScreen(
                         CircularShortcut(
                             icon = Icons.Filled.Medication,
                             label = "مکمل‌ها",
-                            iconTint = SemanticIconGreen,
+                            iconTint = LiquidTheme.iconGreen,
                             onClick = onNavigateToNutrition
                         )
                     }
@@ -420,7 +420,7 @@ fun DashboardScreen(
                         CircularShortcut(
                             icon = Icons.Filled.Analytics,
                             label = "آنالیز",
-                            iconTint = SemanticIconPurple,
+                            iconTint = LiquidTheme.iconPurple,
                             onClick = onNavigateToAnalysis
                         )
                     }
@@ -428,7 +428,7 @@ fun DashboardScreen(
                         CircularShortcut(
                             icon = Icons.Filled.History,
                             label = "سوابق",
-                            iconTint = SemanticIconBlue,
+                            iconTint = LiquidTheme.iconBlue,
                             onClick = onNavigateToWorkouts
                         )
                     }
@@ -454,7 +454,7 @@ fun DashboardScreen(
                     GroupedRow(
                         title = "وزن فعلی",
                         icon = Icons.Filled.FitnessCenter,
-                        iconTint = SemanticIconOrange,
+                        iconTint = LiquidTheme.iconOrange,
                         valueText = if (currentWeight != null) {
                             "${PersianNumberHelper.toPersianDigits(String.format("%.1f", currentWeight))} ${userSettings.weightUnit}"
                         } else "اطلاعات وارد نشده",
@@ -465,7 +465,7 @@ fun DashboardScreen(
                     GroupedRow(
                         title = "شاخص توده بدنی (BMI)",
                         icon = Icons.Filled.MonitorWeight,
-                        iconTint = SemanticIconCyan,
+                        iconTint = LiquidTheme.iconCyan,
                         valueText = if (bmi != null) {
                             "${PersianNumberHelper.toPersianDigits(String.format("%.1f", bmi))} " + when {
                                 bmi < 18.5 -> "(کمبود وزن)"
@@ -481,7 +481,7 @@ fun DashboardScreen(
                     GroupedRow(
                         title = "هدف ورزشی",
                         icon = Icons.Filled.TrackChanges,
-                        iconTint = SemanticIconGreen,
+                        iconTint = LiquidTheme.iconGreen,
                         valueText = when (userSettings.fitnessGoal) {
                             "BULK" -> "افزایش حجم عضلانی"
                             "CUT" -> "کاهش چربی و کات"

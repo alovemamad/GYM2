@@ -90,11 +90,35 @@ fun ProfileSettingsScreen(
         }
     }
 
+    // Save backup to a user-chosen location (Storage Access Framework — no storage permission needed)
+    var pendingBackupJson by remember { mutableStateOf<String?>(null) }
+    val createBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        val json = pendingBackupJson
+        pendingBackupJson = null
+        if (uri != null && json != null) {
+            try {
+                context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                } ?: throw IllegalStateException("stream")
+                lastSavedBackupFile = BackupHelper.saveBackupToFile(context, json)
+                showBackupSuccessDialog = true
+            } catch (_: Exception) {
+                Toast.makeText(context, "ذخیره فایل پشتیبان ناموفق بود. محل دیگری را امتحان کنید.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     // File picker launcher to restore any .json file
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {
+            }
             coroutineScope.launch {
                 val readRes = BackupHelper.readBackupFromUri(context, uri)
                 if (readRes.isSuccess) {
@@ -315,7 +339,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور تمرین ورزشی",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.workoutReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.FitnessCenter,
-                                iconTint = SemanticIconRed,
+                                iconTint = LiquidTheme.iconRed,
                                 showArrow = true,
                                 showDivider = true,
                                 onClick = { timePickerTarget = "WORKOUT" },
@@ -336,7 +360,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور نوشیدن آب",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.waterReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.WaterDrop,
-                                iconTint = SemanticIconCyan,
+                                iconTint = LiquidTheme.iconCyan,
                                 showArrow = true,
                                 showDivider = true,
                                 onClick = { timePickerTarget = "WATER" },
@@ -357,7 +381,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور مصرف مکمل‌ها",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.supplementReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.Medication,
-                                iconTint = SemanticIconGreen,
+                                iconTint = LiquidTheme.iconGreen,
                                 showArrow = true,
                                 showDivider = false,
                                 onClick = { timePickerTarget = "SUPPLEMENT" },
@@ -463,6 +487,7 @@ fun ProfileSettingsScreen(
                                                     userSettings.reminderVolume
                                                 )
                                             },
+                                            onValueChangeFinished = { NotificationHelper.playPreview(context, AlertType.REST_END, userSettings.restTimerVolume) },
                                             colors = SliderDefaults.colors(
                                                 thumbColor = LiquidTheme.accentColor,
                                                 activeTrackColor = LiquidTheme.accentColor,
@@ -491,6 +516,7 @@ fun ProfileSettingsScreen(
                                                     userSettings.reminderVolume
                                                 )
                                             },
+                                            onValueChangeFinished = { NotificationHelper.playPreview(context, AlertType.EXERCISE_END, userSettings.timedAlarmVolume) },
                                             colors = SliderDefaults.colors(
                                                 thumbColor = LiquidTheme.accentColor,
                                                 activeTrackColor = LiquidTheme.accentColor,
@@ -519,6 +545,7 @@ fun ProfileSettingsScreen(
                                                     newVol
                                                 )
                                             },
+                                            onValueChangeFinished = { NotificationHelper.playPreview(context, AlertType.WORKOUT, userSettings.reminderVolume) },
                                             colors = SliderDefaults.colors(
                                                 thumbColor = LiquidTheme.accentColor,
                                                 activeTrackColor = LiquidTheme.accentColor,
@@ -540,9 +567,6 @@ fun ProfileSettingsScreen(
                                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
                                 onTestNotification()
-                                if (!hasNotifPermission) {
-                                    NotificationHelper.playAlarmSoundAndVibrate(context, AlertType.WORKOUT)
-                                }
                                 Toast.makeText(context, "اعلان و زنگ تست با موفقیت ارسال شد!", Toast.LENGTH_SHORT).show()
                             }
                         )
@@ -675,7 +699,7 @@ fun ProfileSettingsScreen(
                                         title = "ظاهر و پالت‌های رنگی",
                                         subtitle = "حالت سیستم و ۸ پالت اختصاصی Liquid Glass",
                                         icon = Icons.Filled.Palette,
-                                        iconTint = SemanticIconPurple,
+                                        iconTint = LiquidTheme.iconPurple,
                                         showDivider = true,
                                         onClick = { currentSubScreen = "appearance" }
                                     )
@@ -684,7 +708,7 @@ fun ProfileSettingsScreen(
                                         title = "یادآورها و هشدارها",
                                         subtitle = "تمرین، مصرف آب و مکمل‌ها",
                                         icon = Icons.Filled.Notifications,
-                                        iconTint = SemanticIconOrange,
+                                        iconTint = LiquidTheme.iconOrange,
                                         showDivider = false,
                                         onClick = { currentSubScreen = "reminders" }
                                     )
@@ -701,26 +725,30 @@ fun ProfileSettingsScreen(
 
                                 SolidGroupedCard {
                                     GroupedRow(
-                                        title = "ایجاد فایل پشتیبان جدید در حافظه",
-                                        subtitle = "ذخیره و جایگزینی فایل اختصاصی در حافظه گوشی",
+                                        title = "ساخت فایل پشتیبان (انتخاب محل ذخیره)",
+                                        subtitle = "ذخیره فایل .json در Downloads یا هر پوشه دلخواه",
                                         icon = Icons.Filled.Save,
-                                        iconTint = SemanticIconBlue,
+                                        iconTint = LiquidTheme.iconBlue,
                                         showDivider = true,
                                         onClick = {
                                             coroutineScope.launch {
                                                 val json = onExportBackupJson()
-                                                val savedFile = BackupHelper.saveBackupToFile(context, json)
-                                                lastSavedBackupFile = savedFile
-                                                showBackupSuccessDialog = true
+                                                pendingBackupJson = json
+                                                val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.US).format(java.util.Date())
+                                                try {
+                                                    createBackupLauncher.launch("gym_pro_backup_$stamp.json")
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(context, "برنامه مدیریت فایل در دسترس نیست.", Toast.LENGTH_LONG).show()
+                                                }
                                             }
                                         }
                                     )
 
                                     GroupedRow(
                                         title = "بازیابی اطلاعات از فایل پشتیبان",
-                                        subtitle = "بازیابی از آخرین فایل ذخیره‌شده یا انتخاب فایل",
+                                        subtitle = "انتخاب فایل پشتیبان از حافظه گوشی",
                                         icon = Icons.Filled.Restore,
-                                        iconTint = SemanticIconGreen,
+                                        iconTint = LiquidTheme.iconGreen,
                                         showDivider = true,
                                         onClick = { showRestoreDialog = true }
                                     )
@@ -729,7 +757,7 @@ fun ProfileSettingsScreen(
                                         title = "خروجی هوشمند برای هوش مصنوعی",
                                         subtitle = "پرامپت آنالیز جامع برای Gemini",
                                         icon = Icons.Filled.AutoAwesome,
-                                        iconTint = SemanticIconIndigo,
+                                        iconTint = LiquidTheme.iconIndigo,
                                         showDivider = true,
                                         onClick = {
                                             coroutineScope.launch {
@@ -743,7 +771,7 @@ fun ProfileSettingsScreen(
                                         title = "درباره GYM",
                                         subtitle = "انگیزشی • ارتباط با توسعه‌دهنده",
                                         icon = Icons.Filled.Info,
-                                        iconTint = SemanticIconCyan,
+                                        iconTint = LiquidTheme.iconCyan,
                                         showDivider = false,
                                         onClick = { showAboutDialog = true }
                                     )
@@ -783,8 +811,8 @@ fun ProfileSettingsScreen(
         val sizeKb = (file.length() / 1024).coerceAtLeast(1)
         LiquidAlertDialog(
             onDismissRequest = { showBackupSuccessDialog = false },
-            title = "پشتیبان‌گیری در حافظه ذخیره شد",
-            message = "فایل جدید در پوشه اختصاصی برنامه ذخیره شد و جایگزین نسخه قبلی گردید.",
+            title = "فایل پشتیبان ذخیره شد",
+            message = "فایل پشتیبان در محلی که انتخاب کردید ذخیره شد. یک نسخه هم در پوشه برنامه نگه‌داری می‌شود.",
             confirmText = "ارسال و اشتراک فایل",
             dismissText = "بستن",
             onConfirm = {
@@ -834,13 +862,9 @@ fun ProfileSettingsScreen(
             dismissText = "انصراف",
             onConfirm = {
                 try {
-                    filePickerLauncher.launch("application/json")
+                    filePickerLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*"))
                 } catch (_: Exception) {
-                    try {
-                        filePickerLauncher.launch("*/*")
-                    } catch (_: Exception) {
-                        Toast.makeText(context, "برنامه مدیریت فایلی برای انتخاب فایل در دسترس نیست.", Toast.LENGTH_LONG).show()
-                    }
+                    Toast.makeText(context, "برنامه مدیریت فایلی برای انتخاب فایل در دسترس نیست.", Toast.LENGTH_LONG).show()
                 }
             },
             content = {
