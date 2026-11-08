@@ -30,7 +30,11 @@ data class UserSettings(
     val supplementReminderEnabled: Boolean = false,
     val supplementReminderTime: String = "09:00",
     val onboardingCompleted: Boolean = false,
-    val lastBackupTime: Long = 0L
+    val lastBackupTime: Long = 0L,
+    val inAppSoundsEnabled: Boolean = true,
+    val restTimerVolume: Float = 0.8f,
+    val timedAlarmVolume: Float = 0.9f,
+    val reminderVolume: Float = 0.8f
 )
 
 class UserPreferences(private val context: Context) {
@@ -57,6 +61,10 @@ class UserPreferences(private val context: Context) {
     private val KEY_SUPPLEMENT_REMINDER_TIME = stringPreferencesKey("supplement_reminder_time")
     private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
     private val KEY_LAST_BACKUP = longPreferencesKey("last_backup_time")
+    private val KEY_IN_APP_SOUNDS_ENABLED = booleanPreferencesKey("in_app_sounds_enabled")
+    private val KEY_REST_TIMER_VOLUME = floatPreferencesKey("rest_timer_volume")
+    private val KEY_TIMED_ALARM_VOLUME = floatPreferencesKey("timed_alarm_volume")
+    private val KEY_REMINDER_VOLUME = floatPreferencesKey("reminder_volume")
 
     val userSettingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
         val rawAge = prefs[KEY_AGE]
@@ -107,7 +115,11 @@ class UserPreferences(private val context: Context) {
             supplementReminderEnabled = prefs[KEY_SUPPLEMENT_REMINDER_ENABLED] ?: false,
             supplementReminderTime = prefs[KEY_SUPPLEMENT_REMINDER_TIME] ?: "09:00",
             onboardingCompleted = prefs[KEY_ONBOARDING_COMPLETED] ?: false,
-            lastBackupTime = prefs[KEY_LAST_BACKUP] ?: 0L
+            lastBackupTime = prefs[KEY_LAST_BACKUP] ?: 0L,
+            inAppSoundsEnabled = prefs[KEY_IN_APP_SOUNDS_ENABLED] ?: true,
+            restTimerVolume = prefs[KEY_REST_TIMER_VOLUME] ?: 0.8f,
+            timedAlarmVolume = prefs[KEY_TIMED_ALARM_VOLUME] ?: 0.9f,
+            reminderVolume = prefs[KEY_REMINDER_VOLUME] ?: 0.8f
         )
     }
 
@@ -135,6 +147,19 @@ class UserPreferences(private val context: Context) {
             prefs[KEY_SUPPLEMENT_REMINDER_TIME] = settings.supplementReminderTime
             prefs[KEY_ONBOARDING_COMPLETED] = settings.onboardingCompleted
             prefs[KEY_LAST_BACKUP] = settings.lastBackupTime
+            prefs[KEY_IN_APP_SOUNDS_ENABLED] = settings.inAppSoundsEnabled
+            prefs[KEY_REST_TIMER_VOLUME] = settings.restTimerVolume
+            prefs[KEY_TIMED_ALARM_VOLUME] = settings.timedAlarmVolume
+            prefs[KEY_REMINDER_VOLUME] = settings.reminderVolume
+        }
+    }
+
+    suspend fun updateSoundSettings(enabled: Boolean, restVol: Float, timedVol: Float, reminderVol: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_IN_APP_SOUNDS_ENABLED] = enabled
+            prefs[KEY_REST_TIMER_VOLUME] = restVol
+            prefs[KEY_TIMED_ALARM_VOLUME] = timedVol
+            prefs[KEY_REMINDER_VOLUME] = reminderVol
         }
     }
 

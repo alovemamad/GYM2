@@ -337,6 +337,10 @@ class GymRepository(
         WaterAppWidgetProvider.updateAllWidgets(context)
     }
 
+    suspend fun updateSoundSettings(enabled: Boolean, restVol: Float, timedVol: Float, reminderVol: Float) {
+        userPreferences.updateSoundSettings(enabled, restVol, timedVol, reminderVol)
+    }
+
     // Do not seed any pre-made workout plans as per user requirement (clean slate)
     suspend fun seedStarterPlanIfEmpty() {
         // Intentionally empty: users create or import their own plans

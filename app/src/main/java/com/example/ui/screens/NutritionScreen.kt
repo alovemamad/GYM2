@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -400,28 +401,33 @@ fun NutritionScreen(
                                             trailingContent = {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
-                                                    // Checkmark for taken today
-                                                    Box(
+                                                    // Checkmark for taken today (Tapping toggles intake)
+                                                    Surface(
                                                         modifier = Modifier
-                                                            .size(44.dp)
-                                                            .clip(CircleShape)
-                                                            .background(if (isTaken) SemanticSuccess else LiquidTheme.surfaceElevated)
-                                                            .clickable {
-                                                                onToggleSupplementIntake(sup, !isTaken, selectedDateGregorian)
+                                                            .size(42.dp)
+                                                            .liquidTapEffect {
+                                                                onToggleSupplementIntake(sup, isTaken, selectedDateGregorian)
                                                             },
-                                                        contentAlignment = Alignment.Center
+                                                        shape = CircleShape,
+                                                        color = if (isTaken) SemanticSuccess else LiquidTheme.surfaceSolid,
+                                                        border = if (isTaken) null else BorderStroke(1.5.dp, LiquidTheme.dividerColor)
                                                     ) {
-                                                        Icon(
-                                                            imageVector = Icons.Filled.Check,
-                                                            contentDescription = "ثبت مصرف",
-                                                            tint = if (isTaken) Color.White else LiquidTheme.textSecondary,
-                                                            modifier = Modifier.size(18.dp)
-                                                        )
+                                                        Box(
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.Check,
+                                                                contentDescription = if (isTaken) "مصرف شده (لمس برای لغو)" else "ثبت مصرف امروز",
+                                                                tint = if (isTaken) Color.White else LiquidTheme.textSecondary,
+                                                                modifier = Modifier.size(20.dp)
+                                                            )
+                                                        }
                                                     }
 
-                                                    // Active Toggle
+                                                    // Active Toggle Switch
                                                     LiquidSwitch(
                                                         checked = sup.isActive,
                                                         onCheckedChange = { onToggleSupplementActive(sup) }

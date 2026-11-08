@@ -60,7 +60,8 @@ fun ProfileSettingsScreen(
     onGetAiPrompt: suspend () -> String,
     onClearAllData: () -> Unit,
     onOpenOnboarding: () -> Unit,
-    onUpdateProfilePhoto: (String) -> Unit = {}
+    onUpdateProfilePhoto: (String) -> Unit = {},
+    onUpdateSoundSettings: (Boolean, Float, Float, Float) -> Unit = { _, _, _, _ -> }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -375,6 +376,161 @@ fun ProfileSettingsScreen(
                         }
                     }
 
+                    // In-app Sound Settings with individual sliders
+                    item {
+                        LiquidSectionHeader(title = "صداها و هشدارهای داخل برنامه")
+
+                        SolidGroupedCard {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                // 1. Global in-app sounds toggle
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(LiquidTheme.accentColor.copy(alpha = 0.16f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = if (userSettings.inAppSoundsEnabled) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                                                contentDescription = null,
+                                                tint = LiquidTheme.accentColor,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                "صداهای داخل برنامه",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Medium,
+                                                color = LiquidTheme.textPrimary
+                                            )
+                                            Text(
+                                                "بوق تایمر استراحت و آلارم حرکات زمان‌دار",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = LiquidTheme.textSecondary
+                                            )
+                                        }
+                                    }
+
+                                    LiquidSwitch(
+                                        checked = userSettings.inAppSoundsEnabled,
+                                        onCheckedChange = { en ->
+                                            onUpdateSoundSettings(
+                                                en,
+                                                userSettings.restTimerVolume,
+                                                userSettings.timedAlarmVolume,
+                                                userSettings.reminderVolume
+                                            )
+                                        }
+                                    )
+                                }
+
+                                if (userSettings.inAppSoundsEnabled) {
+                                    HorizontalDivider(color = LiquidTheme.dividerColor, thickness = 0.5.dp)
+
+                                    // 2. Rest timer beep volume slider
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("حجم بوق تایمر استراحت:", style = MaterialTheme.typography.bodyMedium, color = LiquidTheme.textPrimary)
+                                            Text("${PersianNumberHelper.toPersianDigits((userSettings.restTimerVolume * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
+                                        }
+                                        Slider(
+                                            value = userSettings.restTimerVolume,
+                                            onValueChange = { newVol ->
+                                                onUpdateSoundSettings(
+                                                    userSettings.inAppSoundsEnabled,
+                                                    newVol,
+                                                    userSettings.timedAlarmVolume,
+                                                    userSettings.reminderVolume
+                                                )
+                                            },
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = LiquidTheme.accentColor,
+                                                activeTrackColor = LiquidTheme.accentColor,
+                                                inactiveTrackColor = LiquidTheme.surfaceElevated
+                                            )
+                                        )
+                                    }
+
+                                    // 3. Timed exercise alarm volume slider
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("حجم آلارم پایان حرکات زمان‌دار (پلانک):", style = MaterialTheme.typography.bodyMedium, color = LiquidTheme.textPrimary)
+                                            Text("${PersianNumberHelper.toPersianDigits((userSettings.timedAlarmVolume * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
+                                        }
+                                        Slider(
+                                            value = userSettings.timedAlarmVolume,
+                                            onValueChange = { newVol ->
+                                                onUpdateSoundSettings(
+                                                    userSettings.inAppSoundsEnabled,
+                                                    userSettings.restTimerVolume,
+                                                    newVol,
+                                                    userSettings.reminderVolume
+                                                )
+                                            },
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = LiquidTheme.accentColor,
+                                                activeTrackColor = LiquidTheme.accentColor,
+                                                inactiveTrackColor = LiquidTheme.surfaceElevated
+                                            )
+                                        )
+                                    }
+
+                                    // 4. Reminder notification volume slider
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("حجم صدای زنگ اعلان‌ها و یادآورها:", style = MaterialTheme.typography.bodyMedium, color = LiquidTheme.textPrimary)
+                                            Text("${PersianNumberHelper.toPersianDigits((userSettings.reminderVolume * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
+                                        }
+                                        Slider(
+                                            value = userSettings.reminderVolume,
+                                            onValueChange = { newVol ->
+                                                onUpdateSoundSettings(
+                                                    userSettings.inAppSoundsEnabled,
+                                                    userSettings.restTimerVolume,
+                                                    userSettings.timedAlarmVolume,
+                                                    newVol
+                                                )
+                                            },
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = LiquidTheme.accentColor,
+                                                activeTrackColor = LiquidTheme.accentColor,
+                                                inactiveTrackColor = LiquidTheme.surfaceElevated
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         LiquidPrimaryButton(
                             text = "تست ارسال اعلان و آلارم صوتی",
@@ -664,63 +820,111 @@ fun ProfileSettingsScreen(
 
     // Restore from File Dialog
     if (showRestoreDialog) {
-        val existingFile = BackupHelper.getExistingBackupFile(context)
+        val backupDir = remember(showRestoreDialog) { BackupHelper.getAppBackupDirectory(context) }
+        val backupFiles = remember(showRestoreDialog) {
+            backupDir.listFiles { f -> f.isFile && f.extension.equals("json", ignoreCase = true) }
+                ?.sortedByDescending { it.lastModified() } ?: emptyList()
+        }
+
         LiquidAlertDialog(
             onDismissRequest = { showRestoreDialog = false },
             title = "بازیابی از فایل پشتیبان",
-            message = "می‌توانید از آخرین فایل ذخیره‌شده در حافظه بازیابی کنید یا یک فایل دیگر را انتخاب نمایید:",
-            confirmText = "انتخاب فایل JSON از حافظه",
+            message = if (backupFiles.isNotEmpty()) "فایل موردنظر را از پوشه اختصاصی برنامه انتخاب کنید یا از حافظه خارجی برگزینید:" else "هنوز فایل پشتیبانی در پوشه برنامه یافت نشد. می‌توانید از حافظه دستگاه انتخاب کنید:",
+            confirmText = "انتخاب فایل دیگر از حافظه",
             dismissText = "انصراف",
             onConfirm = {
-                filePickerLauncher.launch("*/*")
+                try {
+                    filePickerLauncher.launch("application/json")
+                } catch (_: Exception) {
+                    try {
+                        filePickerLauncher.launch("*/*")
+                    } catch (_: Exception) {
+                        Toast.makeText(context, "برنامه مدیریت فایلی برای انتخاب فایل در دسترس نیست.", Toast.LENGTH_LONG).show()
+                    }
+                }
             },
             content = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (existingFile != null) {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .liquidTapEffect {
-                                    coroutineScope.launch {
-                                        val readRes = BackupHelper.readBackupFromFile(existingFile)
-                                        if (readRes.isSuccess) {
-                                            val c = readRes.getOrNull()!!
-                                            val json = BackupHelper.createBackupJson(
-                                                settings = c.settings,
-                                                plans = c.plans,
-                                                exercises = c.exercises,
-                                                histories = c.histories,
-                                                skips = c.skips,
-                                                supplements = c.supplements,
-                                                supplementHistories = c.supplementHistories,
-                                                nutritionLogs = c.nutritionLogs,
-                                                measurements = c.measurements
-                                            )
-                                            val res = onRestoreBackupJson(json)
-                                            if (res.isSuccess) {
-                                                showRestoreDialog = false
-                                                Toast.makeText(context, "اطلاعات با موفقیت از آخرین نسخه ذخیره‌شده بازیابی شد!", Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                    }
-                                },
-                            shape = RoundedCornerShape(14.dp),
-                            color = LiquidTheme.accentColor.copy(alpha = 0.12f)
-                        ) {
-                            Row(
+                    if (backupFiles.isNotEmpty()) {
+                        Text(
+                            text = "فایل‌های موجود در پوشه GymPro_Backups:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LiquidTheme.textSecondary
+                        )
+                        backupFiles.take(5).forEach { file ->
+                            val sizeKb = (file.length() / 1024).coerceAtLeast(1)
+                            val modifiedDate = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.US).format(java.util.Date(file.lastModified()))
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .liquidTapEffect {
+                                        coroutineScope.launch {
+                                            val readRes = BackupHelper.readBackupFromFile(file)
+                                            if (readRes.isSuccess) {
+                                                val c = readRes.getOrNull()!!
+                                                val json = BackupHelper.createBackupJson(
+                                                    settings = c.settings,
+                                                    plans = c.plans,
+                                                    exercises = c.exercises,
+                                                    histories = c.histories,
+                                                    skips = c.skips,
+                                                    supplements = c.supplements,
+                                                    supplementHistories = c.supplementHistories,
+                                                    nutritionLogs = c.nutritionLogs,
+                                                    measurements = c.measurements
+                                                )
+                                                val res = onRestoreBackupJson(json)
+                                                if (res.isSuccess) {
+                                                    showRestoreDialog = false
+                                                    Toast.makeText(context, "اطلاعات با موفقیت از فایل «${file.name}» بازیابی شد!", Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    Toast.makeText(context, "خطا در واردسازی دیتابیس.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "فایل پشتیبان نامعتبر است.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                color = LiquidTheme.surfaceElevated
                             ) {
-                                Icon(Icons.Filled.RestorePage, contentDescription = null, tint = LiquidTheme.accentColor)
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("بازیابی سریع از آخرین فایل ذخیره‌شده", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
-                                    Text("نام فایل: ${existingFile.name} (${existingFile.length() / 1024} KB)", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(CircleShape)
+                                            .background(LiquidTheme.accentColor.copy(alpha = 0.16f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.RestorePage,
+                                            contentDescription = null,
+                                            tint = LiquidTheme.accentColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = file.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = LiquidTheme.textPrimary
+                                        )
+                                        Text(
+                                            text = "تاریخ: $modifiedDate • حجم: ${PersianNumberHelper.toPersianDigits(sizeKb)} KB",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = LiquidTheme.textSecondary
+                                        )
+                                    }
                                 }
                             }
                         }

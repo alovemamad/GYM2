@@ -109,9 +109,21 @@ fun WorkoutsScreen(
                 actions = {
                     if (allPlans.isNotEmpty()) {
                         LiquidCircleButton(
-                            icon = Icons.Filled.CopyAll,
-                            contentDescription = "کپی همه برنامه‌ها",
-                            onClick = { showDuplicateAllDialog = true }
+                            icon = Icons.Filled.ContentCopy,
+                            contentDescription = "کپی متن تمامی برنامه‌ها",
+                            onClick = {
+                                coroutineScope.launch {
+                                    val fullText = StringBuilder()
+                                    fullText.append("📋 برنامه‌های تمرینی GYM PRO\n\n")
+                                    allPlans.forEach { plan ->
+                                        val exercises = onGetPlanExercises(plan.id)
+                                        fullText.append(PlanShareHelper.formatPlanAsShareableText(plan, exercises))
+                                        fullText.append("\n-------------------\n\n")
+                                    }
+                                    PlanShareHelper.copyToClipboard(context, "برنامه‌های تمرینی", fullText.toString())
+                                    Toast.makeText(context, "متن تمامی برنامه‌ها در حافظه کپی شد (آماده ارسال به دیگران).", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                     }
@@ -169,88 +181,110 @@ fun WorkoutsScreen(
                         var menuExpanded by remember { mutableStateOf(false) }
 
                         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            ContentRow(
-                                title = plan.name,
-                                subtitle = "برنامه امروز • ${plan.scheduledDay}",
-                                icon = Icons.Filled.PlayArrow,
-                                badgeText = "شروع نوبت",
-                                gradient = LiquidTheme.cardGradient,
-                                onClick = { onStartWorkout(plan) },
-                                trailing = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(
-                                            onClick = {
-                                                onDuplicatePlan(plan.id)
-                                                Toast.makeText(context, "برنامه «${plan.name}» کپی شد.", Toast.LENGTH_SHORT).show()
-                                            },
-                                            modifier = Modifier.size(44.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.ContentCopy,
-                                                contentDescription = "کپی برنامه",
-                                                tint = LiquidTheme.accentColor,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-
-                                        Box {
-                                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(36.dp)) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = "منو", tint = LiquidTheme.textSecondary)
+                            SwipeablePlanCard(
+                                onDelete = { planToDelete = plan },
+                                onEdit = { onEditPlan(plan) },
+                                onCopyText = {
+                                    coroutineScope.launch {
+                                        val exercises = onGetPlanExercises(plan.id)
+                                        val text = PlanShareHelper.formatPlanAsShareableText(plan, exercises)
+                                        PlanShareHelper.copyToClipboard(context, "برنامه ${plan.name}", text)
+                                        Toast.makeText(context, "متن برنامه «${plan.name}» کپی شد (آماده ارسال به دیگران).", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ) {
+                                ContentRow(
+                                    title = plan.name,
+                                    subtitle = "برنامه امروز • ${plan.scheduledDay}",
+                                    icon = Icons.Filled.PlayArrow,
+                                    badgeText = "شروع نوبت",
+                                    gradient = LiquidTheme.cardGradient,
+                                    onClick = { onStartWorkout(plan) },
+                                    trailing = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(
+                                                onClick = {
+                                                    coroutineScope.launch {
+                                                        val exercises = onGetPlanExercises(plan.id)
+                                                        val text = PlanShareHelper.formatPlanAsShareableText(plan, exercises)
+                                                        PlanShareHelper.copyToClipboard(context, "برنامه ${plan.name}", text)
+                                                        Toast.makeText(context, "متن برنامه «${plan.name}» کپی شد (آماده ارسال به دیگران).", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                                modifier = Modifier.size(44.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.ContentCopy,
+                                                    contentDescription = "کپی متن برنامه",
+                                                    tint = LiquidTheme.accentColor,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
                                             }
 
-                                            DropdownMenu(
-                                                expanded = menuExpanded,
-                                                onDismissRequest = { menuExpanded = false },
-                                                modifier = Modifier.background(LiquidTheme.surfaceSolid)
-                                            ) {
-                                                DropdownMenuItem(
-                                                    text = { Text("ویرایش برنامه", color = LiquidTheme.textPrimary) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        onEditPlan(plan)
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = LiquidTheme.accentColor) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("تعویق یا رد نوبت امروز", color = LiquidTheme.textPrimary) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        planToReschedule = plan
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.EventBusy, contentDescription = null, tint = SemanticWarning) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("اشتراک‌گذاری (JSON)", color = LiquidTheme.textPrimary) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        coroutineScope.launch {
-                                                            val exercises = onGetPlanExercises(plan.id)
-                                                            PlanShareHelper.sharePlan(context, plan, exercises)
-                                                        }
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null, tint = LiquidTheme.accentColor) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("تکثیر (کپی)", color = LiquidTheme.textPrimary) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        onDuplicatePlan(plan.id)
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = LiquidTheme.accentColor) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("حذف برنامه", color = SemanticError) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        planToDelete = plan
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = SemanticError) }
-                                                )
+                                            Box {
+                                                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(36.dp)) {
+                                                    Icon(Icons.Filled.MoreVert, contentDescription = "منو", tint = LiquidTheme.textSecondary)
+                                                }
+
+                                                DropdownMenu(
+                                                    expanded = menuExpanded,
+                                                    onDismissRequest = { menuExpanded = false },
+                                                    modifier = Modifier.background(LiquidTheme.surfaceSolid)
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("ویرایش برنامه", color = LiquidTheme.textPrimary) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            onEditPlan(plan)
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = LiquidTheme.accentColor) }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("تعویق یا رد نوبت امروز", color = LiquidTheme.textPrimary) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            planToReschedule = plan
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.EventBusy, contentDescription = null, tint = SemanticWarning) }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("اشتراک‌گذاری (JSON)", color = LiquidTheme.textPrimary) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            coroutineScope.launch {
+                                                                val exercises = onGetPlanExercises(plan.id)
+                                                                PlanShareHelper.sharePlan(context, plan, exercises)
+                                                            }
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null, tint = LiquidTheme.accentColor) }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("کپی متن برنامه", color = LiquidTheme.textPrimary) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            coroutineScope.launch {
+                                                                val exercises = onGetPlanExercises(plan.id)
+                                                                val text = PlanShareHelper.formatPlanAsShareableText(plan, exercises)
+                                                                PlanShareHelper.copyToClipboard(context, "برنامه ${plan.name}", text)
+                                                                Toast.makeText(context, "متن برنامه «${plan.name}» کپی شد.", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = LiquidTheme.accentColor) }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("حذف برنامه", color = SemanticError) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            planToDelete = plan
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = SemanticError) }
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
@@ -265,89 +299,111 @@ fun WorkoutsScreen(
                         var menuExpanded by remember { mutableStateOf(false) }
 
                         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            ContentRow(
-                                title = plan.name,
-                                subtitle = "روزهای اجرا: ${plan.scheduledDay}",
-                                icon = Icons.Filled.FitnessCenter,
-                                gradient = Brush.linearGradient(
-                                    listOf(LiquidTheme.surfaceElevated, LiquidTheme.surfaceSolid)
-                                ),
-                                onClick = { onStartWorkout(plan) },
-                                trailing = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(
-                                            onClick = {
-                                                onDuplicatePlan(plan.id)
-                                                Toast.makeText(context, "برنامه «${plan.name}» کپی شد.", Toast.LENGTH_SHORT).show()
-                                            },
-                                            modifier = Modifier.size(44.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.ContentCopy,
-                                                contentDescription = "کپی برنامه",
-                                                tint = LiquidTheme.accentColor,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-
-                                        Box {
-                                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(36.dp)) {
-                                                Icon(Icons.Filled.MoreVert, contentDescription = "منو", tint = LiquidTheme.textSecondary)
+                            SwipeablePlanCard(
+                                onDelete = { planToDelete = plan },
+                                onEdit = { onEditPlan(plan) },
+                                onCopyText = {
+                                    coroutineScope.launch {
+                                        val exercises = onGetPlanExercises(plan.id)
+                                        val text = PlanShareHelper.formatPlanAsShareableText(plan, exercises)
+                                        PlanShareHelper.copyToClipboard(context, "برنامه ${plan.name}", text)
+                                        Toast.makeText(context, "متن برنامه «${plan.name}» کپی شد (آماده ارسال به دیگران).", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            ) {
+                                ContentRow(
+                                    title = plan.name,
+                                    subtitle = "روزهای اجرا: ${plan.scheduledDay}",
+                                    icon = Icons.Filled.FitnessCenter,
+                                    gradient = Brush.linearGradient(
+                                        listOf(LiquidTheme.surfaceElevated, LiquidTheme.surfaceSolid)
+                                    ),
+                                    onClick = { onStartWorkout(plan) },
+                                    trailing = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(
+                                                onClick = {
+                                                    coroutineScope.launch {
+                                                        val exercises = onGetPlanExercises(plan.id)
+                                                        val text = PlanShareHelper.formatPlanAsShareableText(plan, exercises)
+                                                        PlanShareHelper.copyToClipboard(context, "برنامه ${plan.name}", text)
+                                                        Toast.makeText(context, "متن برنامه «${plan.name}» کپی شد (آماده ارسال به دیگران).", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                                modifier = Modifier.size(44.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.ContentCopy,
+                                                    contentDescription = "کپی متن برنامه",
+                                                    tint = LiquidTheme.accentColor,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
                                             }
 
-                                            DropdownMenu(
-                                                expanded = menuExpanded,
-                                                onDismissRequest = { menuExpanded = false },
-                                                modifier = Modifier.background(LiquidTheme.surfaceSolid)
-                                            ) {
-                                                DropdownMenuItem(
-                                                    text = { Text("شروع تمرین", color = LiquidTheme.textPrimary) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        onStartWorkout(plan)
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = LiquidTheme.accentColor) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("ویرایش برنامه", color = LiquidTheme.textPrimary) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        onEditPlan(plan)
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = LiquidTheme.accentColor) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("اشتراک‌گذاری (JSON)", color = LiquidTheme.textPrimary) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        coroutineScope.launch {
-                                                            val exercises = onGetPlanExercises(plan.id)
-                                                            PlanShareHelper.sharePlan(context, plan, exercises)
-                                                        }
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null, tint = LiquidTheme.accentColor) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("تکثیر (کپی)", color = LiquidTheme.textPrimary) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        onDuplicatePlan(plan.id)
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = LiquidTheme.accentColor) }
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("حذف برنامه", color = SemanticError) },
-                                                    onClick = {
-                                                        menuExpanded = false
-                                                        planToDelete = plan
-                                                    },
-                                                    leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = SemanticError) }
-                                                )
+                                            Box {
+                                                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(36.dp)) {
+                                                    Icon(Icons.Filled.MoreVert, contentDescription = "منو", tint = LiquidTheme.textSecondary)
+                                                }
+
+                                                DropdownMenu(
+                                                    expanded = menuExpanded,
+                                                    onDismissRequest = { menuExpanded = false },
+                                                    modifier = Modifier.background(LiquidTheme.surfaceSolid)
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("شروع تمرین", color = LiquidTheme.textPrimary) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            onStartWorkout(plan)
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = LiquidTheme.accentColor) }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("ویرایش برنامه", color = LiquidTheme.textPrimary) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            onEditPlan(plan)
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = LiquidTheme.accentColor) }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("اشتراک‌گذاری (JSON)", color = LiquidTheme.textPrimary) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            coroutineScope.launch {
+                                                                val exercises = onGetPlanExercises(plan.id)
+                                                                PlanShareHelper.sharePlan(context, plan, exercises)
+                                                            }
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null, tint = LiquidTheme.accentColor) }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("کپی متن برنامه", color = LiquidTheme.textPrimary) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            coroutineScope.launch {
+                                                                val exercises = onGetPlanExercises(plan.id)
+                                                                val text = PlanShareHelper.formatPlanAsShareableText(plan, exercises)
+                                                                PlanShareHelper.copyToClipboard(context, "برنامه ${plan.name}", text)
+                                                                Toast.makeText(context, "متن برنامه «${plan.name}» کپی شد.", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = LiquidTheme.accentColor) }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("حذف برنامه", color = SemanticError) },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            planToDelete = plan
+                                                        },
+                                                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = SemanticError) }
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
@@ -512,5 +568,171 @@ fun WorkoutsScreen(
                 Toast.makeText(context, "تمام برنامه‌ها با موفقیت کپی شدند.", Toast.LENGTH_SHORT).show()
             }
         )
+    }
+}
+
+@Composable
+fun SwipeablePlanCard(
+    onDelete: () -> Unit,
+    onEdit: () -> Unit,
+    onCopyText: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val density = LocalDensity.current
+    val revealWidth = 200.dp
+    val revealPx = with(density) { revealWidth.toPx() }
+    val offsetX = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+    ) {
+        // Actions row revealed on swipe to the RIGHT (placed on the start/left edge)
+        Row(
+            modifier = Modifier
+                .matchParentSize()
+                .background(LiquidTheme.surfaceElevated)
+                .padding(start = 6.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 1. Edit (Pencil)
+            Column(
+                modifier = Modifier
+                    .width(62.dp)
+                    .fillMaxHeight()
+                    .clickable {
+                        coroutineScope.launch { offsetX.animateTo(0f) }
+                        onEdit()
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(LiquidTheme.accentColor.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = "ویرایش برنامه",
+                        tint = LiquidTheme.accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "ویرایش",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = LiquidTheme.accentColor
+                )
+            }
+
+            // 2. Delete (Trash)
+            Column(
+                modifier = Modifier
+                    .width(62.dp)
+                    .fillMaxHeight()
+                    .clickable {
+                        coroutineScope.launch { offsetX.animateTo(0f) }
+                        onDelete()
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(SemanticError.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "حذف برنامه",
+                        tint = SemanticError,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "حذف",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = SemanticError
+                )
+            }
+
+            // 3. Copy text
+            Column(
+                modifier = Modifier
+                    .width(62.dp)
+                    .fillMaxHeight()
+                    .clickable {
+                        coroutineScope.launch { offsetX.animateTo(0f) }
+                        onCopyText()
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(LiquidTheme.surfaceSolid),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.ContentCopy,
+                        contentDescription = "کپی متن برنامه",
+                        tint = LiquidTheme.textPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "کپی متن",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = LiquidTheme.textPrimary
+                )
+            }
+        }
+
+        // Foreground Card content that slides to the right
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            coroutineScope.launch {
+                                if (offsetX.value > revealPx / 3) {
+                                    offsetX.animateTo(revealPx)
+                                } else {
+                                    offsetX.animateTo(0f)
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch { offsetX.animateTo(0f) }
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            coroutineScope.launch {
+                                val newOffset = (offsetX.value + dragAmount).coerceIn(0f, revealPx)
+                                offsetX.snapTo(newOffset)
+                            }
+                        }
+                    )
+                }
+        ) {
+            content()
+        }
     }
 }

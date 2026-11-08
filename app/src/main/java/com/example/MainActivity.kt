@@ -372,7 +372,10 @@ class MainActivity : ComponentActivity() {
                                             onGetAiPrompt = { gymViewModel.getAiExportPrompt() },
                                             onClearAllData = { gymViewModel.clearAllData() },
                                             onOpenOnboarding = { isShowingOnboarding = true },
-                                            // onUpdateProfilePhoto = { photo -> gymViewModel.updateProfilePhoto(photo) } // موقتا کامنت شد چون تابعش وجود نداره
+                                            onUpdateProfilePhoto = { photo -> gymViewModel.updateProfilePhoto(photo) },
+                                            onUpdateSoundSettings = { en, rVol, tVol, remVol ->
+                                                gymViewModel.updateSoundSettings(en, rVol, tVol, remVol)
+                                            }
                                         )
                                     }
                                 }

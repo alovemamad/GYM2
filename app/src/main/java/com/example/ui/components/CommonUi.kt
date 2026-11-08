@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -1438,11 +1439,15 @@ fun LiquidTimePickerDialog(
     val parts = initialTime.split(":").mapNotNull { it.trim().toIntOrNull() }
     var selectedHour by remember { mutableIntStateOf(parts.getOrElse(0) { 18 }.coerceIn(0, 23)) }
     var selectedMinute by remember { mutableIntStateOf(parts.getOrElse(1) { 0 }.coerceIn(0, 59)) }
+    val haptic = LocalHapticFeedback.current
+
+    var hourDragAccumulator by remember { mutableFloatStateOf(0f) }
+    var minuteDragAccumulator by remember { mutableFloatStateOf(0f) }
 
     LiquidAlertDialog(
         onDismissRequest = onDismissRequest,
         title = title,
-        message = "", // 👈 این خط اضافه شد
+        message = "",
         confirmText = "تأیید و ذخیره",
         dismissText = "انصراف",
         onConfirm = {
@@ -1453,9 +1458,15 @@ fun LiquidTimePickerDialog(
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Big Display
+                Text(
+                    text = "برای تغییر دانه‌دانه، انگشت خود را روی عدد به بالا یا پایین بکشید",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LiquidTheme.textSecondary
+                )
+
+                // Big Display with vertical drag gesture
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -1464,17 +1475,48 @@ fun LiquidTimePickerDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = 12.dp, horizontal = 16.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Hour column
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(LiquidTheme.surfaceSolid.copy(alpha = 0.5f))
+                                .padding(vertical = 8.dp)
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = { hourDragAccumulator = 0f },
+                                        onDragCancel = { hourDragAccumulator = 0f },
+                                        onVerticalDrag = { _, dragAmount ->
+                                            hourDragAccumulator += dragAmount
+                                            val threshold = 28f
+                                            if (hourDragAccumulator <= -threshold) {
+                                                // Swipe UP increases hour by 1
+                                                selectedHour = (selectedHour + 1) % 24
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                hourDragAccumulator = 0f
+                                            } else if (hourDragAccumulator >= threshold) {
+                                                // Swipe DOWN decreases hour by 1
+                                                selectedHour = if (selectedHour == 0) 23 else selectedHour - 1
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                hourDragAccumulator = 0f
+                                            }
+                                        }
+                                    )
+                                }
+                        ) {
                             IconButton(
-                                onClick = { selectedHour = (selectedHour + 1) % 24 },
-                                modifier = Modifier.size(44.dp)
+                                onClick = {
+                                    selectedHour = (selectedHour + 1) % 24
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                },
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش ساعت", tint = LiquidTheme.accentColor)
+                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش ۱ ساعت", tint = LiquidTheme.accentColor)
                             }
                             Text(
                                 text = PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%02d", selectedHour)),
@@ -1483,12 +1525,15 @@ fun LiquidTimePickerDialog(
                                 color = LiquidTheme.accentColor
                             )
                             IconButton(
-                                onClick = { selectedHour = if (selectedHour == 0) 23 else selectedHour - 1 },
-                                modifier = Modifier.size(44.dp)
+                                onClick = {
+                                    selectedHour = if (selectedHour == 0) 23 else selectedHour - 1
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                },
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش ساعت", tint = LiquidTheme.accentColor)
+                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش ۱ ساعت", tint = LiquidTheme.accentColor)
                             }
-                            Text("ساعت", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                            Text("ساعت (بکشید)", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
                         }
 
                         Text(
@@ -1496,16 +1541,47 @@ fun LiquidTimePickerDialog(
                             style = MaterialTheme.typography.displayMedium.copy(fontSize = 38.sp),
                             fontWeight = FontWeight.Bold,
                             color = LiquidTheme.textSecondary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp)
                         )
 
                         // Minute column
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(LiquidTheme.surfaceSolid.copy(alpha = 0.5f))
+                                .padding(vertical = 8.dp)
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = { minuteDragAccumulator = 0f },
+                                        onDragCancel = { minuteDragAccumulator = 0f },
+                                        onVerticalDrag = { _, dragAmount ->
+                                            minuteDragAccumulator += dragAmount
+                                            val threshold = 22f
+                                            if (minuteDragAccumulator <= -threshold) {
+                                                // Swipe UP increases minute by 1
+                                                selectedMinute = (selectedMinute + 1) % 60
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                minuteDragAccumulator = 0f
+                                            } else if (minuteDragAccumulator >= threshold) {
+                                                // Swipe DOWN decreases minute by 1
+                                                selectedMinute = if (selectedMinute == 0) 59 else selectedMinute - 1
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                minuteDragAccumulator = 0f
+                                            }
+                                        }
+                                    )
+                                }
+                        ) {
                             IconButton(
-                                onClick = { selectedMinute = (selectedMinute + 5) % 60 },
-                                modifier = Modifier.size(44.dp)
+                                onClick = {
+                                    selectedMinute = (selectedMinute + 1) % 60
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                },
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش دقیقه", tint = LiquidTheme.accentColor)
+                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش ۱ دقیقه", tint = LiquidTheme.accentColor)
                             }
                             Text(
                                 text = PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%02d", selectedMinute)),
@@ -1514,12 +1590,15 @@ fun LiquidTimePickerDialog(
                                 color = LiquidTheme.textPrimary
                             )
                             IconButton(
-                                onClick = { selectedMinute = if (selectedMinute < 5) 55 else selectedMinute - 5 },
-                                modifier = Modifier.size(44.dp)
+                                onClick = {
+                                    selectedMinute = if (selectedMinute == 0) 59 else selectedMinute - 1
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                },
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش دقیقه", tint = LiquidTheme.accentColor)
+                                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش ۱ دقیقه", tint = LiquidTheme.accentColor)
                             }
-                            Text("دقیقه", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                            Text("دقیقه (بکشید)", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
                         }
                     }
                 }

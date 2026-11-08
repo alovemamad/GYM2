@@ -186,6 +186,12 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateSoundSettings(enabled: Boolean, restVol: Float, timedVol: Float, reminderVol: Float) {
+        viewModelScope.launch {
+            repository.updateSoundSettings(enabled, restVol, timedVol, reminderVol)
+        }
+    }
+
     // Reminder toggles
     fun toggleReminder(type: String, enabled: Boolean, timeStr: String) {
         viewModelScope.launch {
