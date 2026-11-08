@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -459,80 +460,68 @@ fun AnalysisScreen(
             }
 
             2 -> {
-                // Tab 2: Charts inside Solid Card with big key number and accent line
+                // Tab 2: Weight trend, BMI trend, custom chart (Y axis selectable)
                 item {
-                    val weights = allMeasurements.mapNotNull { it.weightKg }
-                    val currentVal = weights.lastOrNull() ?: currentWeight ?: 0.0
-
+                    val weightPoints = allMeasurements.reversed().mapNotNull { it.weightKg }
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        SolidGroupedCard {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text("روند تغییرات وزن", style = MaterialTheme.typography.titleMedium, color = LiquidTheme.textSecondary)
-                                Text(
-                                    text = "${PersianNumberHelper.toPersianDigits(String.format("%.1f", currentVal))} kg",
-                                    style = MaterialTheme.typography.displayMedium.copy(fontSize = 36.sp),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = LiquidTheme.accentColor
-                                )
+                        LiquidChartCard(
+                            title = "روند وزن",
+                            unit = "kg",
+                            values = weightPoints,
+                            lineColor = LiquidTheme.accentColor,
+                            emptyMessage = "حداقل ۲ بار ثبت وزن برای رسم نمودار نیاز است"
+                        )
+                    }
+                }
 
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                // Interactive Line Canvas Chart
-                                val accent = LiquidTheme.accentColor
-                                val divider = LiquidTheme.dividerColor
-
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(140.dp)
-                                ) {
-                                    Canvas(modifier = Modifier.fillMaxSize()) {
-                                        if (weights.size >= 2) {
-                                            val minW = weights.minOrNull() ?: 0.0
-                                            val maxW = weights.maxOrNull() ?: 100.0
-                                            val range = (maxW - minW).coerceAtLeast(1.0)
-
-                                            val stepX = size.width / (weights.size - 1)
-                                            val path = Path()
-
-                                            weights.forEachIndexed { i, w ->
-                                                val x = i * stepX
-                                                val y = size.height - (((w - minW) / range) * (size.height - 20.dp.toPx())).toFloat() - 10.dp.toPx()
-                                                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-
-                                                // Point dot
-                                                drawCircle(color = accent, radius = 4.dp.toPx(), center = Offset(x, y))
-                                            }
-
-                                            drawPath(
-                                                path = path,
-                                                color = accent,
-                                                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-                                            )
-                                        } else {
-                                            // Guideline
-                                            drawLine(
-                                                color = divider,
-                                                start = Offset(0f, size.height / 2),
-                                                end = Offset(size.width, size.height / 2),
-                                                strokeWidth = 2.dp.toPx()
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Text(
-                                    text = if (weights.size < 2) "حداقل ۲ بار ثبت وزن برای رسم نمودار خطی لازم است." else "نمودار بر اساس تاریخ‌های ثبت سوابق",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = LiquidTheme.textSecondary
-                                )
-                            }
+                item {
+                    val userH = userSettings.heightCm
+                    val bmiPoints = if (userH != null && userH > 0) {
+                        allMeasurements.reversed().mapNotNull { m ->
+                            val w = m.weightKg ?: return@mapNotNull null
+                            val hM = (m.heightCm ?: userH) / 100.0
+                            w / (hM * hM)
                         }
+                    } else emptyList()
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        LiquidChartCard(
+                            title = "روند BMI",
+                            unit = "BMI",
+                            values = bmiPoints,
+                            lineColor = SemanticSuccess,
+                            emptyMessage = "برای نمایش روند BMI قد و وزن را ثبت کنید"
+                        )
+                    }
+                }
+
+                item {
+                    var selectedYIndex by remember { mutableIntStateOf(0) }
+                    val yLabels = listOf("وزن", "دور کمر", "دور بازو", "دور سینه")
+                    val yUnits = listOf("kg", "cm", "cm", "cm")
+                    val customPoints = allMeasurements.reversed().mapNotNull { m ->
+                        when (selectedYIndex) {
+                            1 -> m.waistCm
+                            2 -> m.armsCm
+                            3 -> m.chestCm
+                            else -> m.weightKg
+                        }
+                    }
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        LiquidSegmentedControl(
+                            items = yLabels,
+                            selectedIndex = selectedYIndex,
+                            onSelectIndex = { selectedYIndex = it }
+                        )
+                        LiquidChartCard(
+                            title = "نمودار سفارشی: ${yLabels[selectedYIndex]}",
+                            unit = yUnits[selectedYIndex],
+                            values = customPoints,
+                            lineColor = SemanticWarning,
+                            emptyMessage = "داده کافی برای این متغیر ثبت نشده است"
+                        )
                     }
                 }
             }
@@ -625,5 +614,135 @@ fun AnalysisScreen(
                 }
             }
         )
+    }
+}
+
+
+@Composable
+fun LiquidChartCard(
+    title: String,
+    unit: String,
+    values: List<Double>,
+    lineColor: Color,
+    emptyMessage: String,
+    modifier: Modifier = Modifier
+) {
+    SolidGroupedCard(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = LiquidTheme.textSecondary
+            )
+            if (values.size < 2) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = emptyMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LiquidTheme.textSecondary
+                    )
+                }
+            } else {
+                val latestValue = values.last()
+                val minV = values.minOrNull() ?: 0.0
+                val maxV = values.maxOrNull() ?: 0.0
+                Text(
+                    text = "${PersianNumberHelper.formatDecimal(latestValue)} $unit",
+                    style = MaterialTheme.typography.displayMedium.copy(fontSize = 36.sp),
+                    fontWeight = FontWeight.ExtraBold,
+                    color = lineColor
+                )
+                Text(
+                    text = "کمترین: ${PersianNumberHelper.formatDecimal(minV)}  |  بیشترین: ${PersianNumberHelper.formatDecimal(maxV)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LiquidTheme.textSecondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                LiquidLineChart(
+                    values = values,
+                    lineColor = lineColor,
+                    gridColor = LiquidTheme.dividerColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LiquidLineChart(
+    values: List<Double>,
+    lineColor: Color,
+    gridColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        if (values.size < 2) return@Canvas
+
+        val minVal = values.minOrNull() ?: 0.0
+        val maxVal = values.maxOrNull() ?: 1.0
+        val range = (maxVal - minVal).coerceAtLeast(0.0001)
+        val padY = 12.dp.toPx()
+        val chartH = size.height - padY * 2
+        val stepX = size.width / (values.size - 1)
+
+        // Light horizontal guide lines
+        for (i in 0..2) {
+            val gy = padY + chartH * i / 2f
+            drawLine(
+                color = gridColor,
+                start = Offset(0f, gy),
+                end = Offset(size.width, gy),
+                strokeWidth = 1.dp.toPx()
+            )
+        }
+
+        val linePath = Path()
+        val points = values.mapIndexed { index, v ->
+            val x = index * stepX
+            val y = padY + chartH - (((v - minVal) / range) * chartH).toFloat()
+            Offset(x, y)
+        }
+        points.forEachIndexed { index, pt ->
+            if (index == 0) linePath.moveTo(pt.x, pt.y) else linePath.lineTo(pt.x, pt.y)
+        }
+
+        val fillPath = Path().apply {
+            addPath(linePath)
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+        drawPath(
+            path = fillPath,
+            brush = Brush.verticalGradient(
+                colors = listOf(lineColor.copy(alpha = 0.22f), Color.Transparent)
+            )
+        )
+        drawPath(
+            path = linePath,
+            color = lineColor,
+            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+        )
+        points.forEachIndexed { index, pt ->
+            val isLast = index == points.lastIndex
+            drawCircle(
+                color = lineColor,
+                radius = if (isLast) 6.dp.toPx() else 3.5.dp.toPx(),
+                center = pt
+            )
+        }
     }
 }

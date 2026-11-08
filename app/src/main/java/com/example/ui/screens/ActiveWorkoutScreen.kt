@@ -42,6 +42,7 @@ fun ActiveWorkoutScreen(
     val isRestTimerActive by viewModel.isRestTimerActive.collectAsState()
     val restSecondsRemaining by viewModel.restSecondsRemaining.collectAsState()
     val totalRestUsed by viewModel.totalRestSecondsUsed.collectAsState()
+    val isGlobalCustomMetrics by viewModel.isGlobalCustomMetrics.collectAsState()
 
     var showFinishConfirmDialog by remember { mutableStateOf(false) }
     var showCancelConfirmDialog by remember { mutableStateOf(false) }
@@ -292,7 +293,9 @@ fun ActiveWorkoutScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text("ست", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.width(36.dp), textAlign = TextAlign.Center)
-                            if (isTimed) {
+                            if (isGlobalCustomMetrics) {
+                                Text("شاخص‌های جلسه سفارشی", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.weight(2f), textAlign = TextAlign.Center)
+                            } else if (isTimed) {
                                 Text("مدت زمان", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                                 Text("تایمر معکوس", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                             } else {
@@ -323,7 +326,51 @@ fun ActiveWorkoutScreen(
                                     textAlign = TextAlign.Center
                                 )
 
-                                if (isTimed) {
+                                if (isGlobalCustomMetrics) {
+                                    // Custom metrics (weight, reps, time, ...) editable per set
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(2f)
+                                            .padding(horizontal = 6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        setLog.customValues.forEach { (metricKey, metricVal) ->
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = metricKey,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = LiquidTheme.textSecondary,
+                                                    modifier = Modifier.width(72.dp)
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(38.dp)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(LiquidTheme.surfaceSolid),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    BasicTextField(
+                                                        value = metricVal,
+                                                        onValueChange = { newVal ->
+                                                            viewModel.updateCustomMetricValue(exIndex, setIndex, metricKey, newVal)
+                                                        },
+                                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                            textAlign = TextAlign.Center,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = LiquidTheme.textPrimary
+                                                        ),
+                                                        singleLine = true,
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if (isTimed) {
                                     // Timed duration label & adjuster
                                     Row(
                                         modifier = Modifier.weight(1f),
@@ -517,6 +564,31 @@ fun ActiveWorkoutScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "حالت شاخص‌های دلخواه",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = LiquidTheme.textPrimary
+                            )
+                            Text(
+                                text = "ویرایش وزنه، تکرار و زمان هر ست به‌صورت فیلدهای جداگانه",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LiquidTheme.textSecondary
+                            )
+                        }
+                        LiquidSwitch(
+                            checked = isGlobalCustomMetrics,
+                            onCheckedChange = { viewModel.toggleGlobalCustomMetrics() },
+                            modifier = Modifier.testTag("toggle_custom_metrics_btn")
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
