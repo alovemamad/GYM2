@@ -121,12 +121,11 @@ fun ActiveWorkoutScreen(
                     val timeStr = "${String.format("%02d", minutes)}:${String.format("%02d", seconds)}"
 
                     // Elapsed Workout Time Card
-                    Surface(
+                    Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(68.dp),
-                        shape = RoundedCornerShape(18.dp),
-                        color = LiquidTheme.surfaceSolid
+                            .height(68.dp)
+                            .liquidGlass(shape = RoundedCornerShape(18.dp), elevation = 4.dp)
                     ) {
                         Row(
                             modifier = Modifier
@@ -160,12 +159,11 @@ fun ActiveWorkoutScreen(
                     val totalSets = exercisesState.sumOf { it.sets.size }
                     val completedSets = exercisesState.sumOf { it.sets.count { s -> s.completed } }
 
-                    Surface(
+                    Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(68.dp),
-                        shape = RoundedCornerShape(18.dp),
-                        color = LiquidTheme.surfaceSolid
+                            .height(68.dp)
+                            .liquidGlass(shape = RoundedCornerShape(18.dp), elevation = 4.dp)
                     ) {
                         Row(
                             modifier = Modifier

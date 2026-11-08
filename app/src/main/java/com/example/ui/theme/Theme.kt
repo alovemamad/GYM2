@@ -78,17 +78,17 @@ object LiquidTheme {
     val dividerColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) DarkDivider else LightDivider
+        get() = Color.White.copy(alpha = 0.15f)
 
     val textPrimary: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) DarkTextPrimary else LightTextPrimary
+        get() = Color.White
 
     val textSecondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) DarkTextSecondary else LightTextSecondary
+        get() = Color.White.copy(alpha = 0.82f)
 }
 
 fun createLiquidColorScheme(palette: LiquidPalette, isDark: Boolean): ColorScheme {

@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.WorkoutExercise
 import com.example.data.local.WorkoutPlan
 import com.example.ui.components.LiquidBottomBar
+import com.example.ui.components.LiquidGlassRoot
 import com.example.ui.components.LiquidRestTimerDock
 import com.example.ui.navigation.Screen
 import com.example.ui.screens.*
@@ -108,9 +109,11 @@ class MainActivity : ComponentActivity() {
                 appearanceMode = userSettings.appearanceMode,
                 accentPalette = userSettings.accentPalette
             ) {
-                // Strictly enforce RTL for Persian language
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    if (showOnboardingFirstTime || isShowingOnboarding) {
+                val hazeState = remember { dev.chrisbanes.haze.HazeState() }
+                LiquidGlassRoot(hazeState = hazeState) {
+                    // Strictly enforce RTL for Persian language
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                        if (showOnboardingFirstTime || isShowingOnboarding) {
                         BackHandler(enabled = isShowingOnboarding) {
                             isShowingOnboarding = false
                         }
@@ -381,6 +384,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 }
                             }
+                        }
                         }
                     }
                 }
