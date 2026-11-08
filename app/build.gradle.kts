@@ -106,6 +106,7 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
+  implementation(libs.haze)
   implementation(libs.converter.moshi)
   // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)
