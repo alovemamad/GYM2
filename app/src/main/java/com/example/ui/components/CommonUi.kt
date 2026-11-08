@@ -1,6 +1,5 @@
 package com.example.ui.components
 
-import android.os.Build
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -25,7 +24,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -39,6 +37,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -69,9 +68,9 @@ fun Modifier.liquidGlass(
     }
 
     val baseBg = if (isDark) {
-        Color(0xFF141416).copy(alpha = 0.75f)
+        GlassBaseDark.copy(alpha = 0.94f)
     } else {
-        Color(0xFFF9F9FC).copy(alpha = 0.78f)
+        GlassBaseLight.copy(alpha = 0.94f)
     }
 
     val borderBrush = Brush.verticalGradient(
@@ -82,12 +81,6 @@ fun Modifier.liquidGlass(
     )
 
     val shadowColor = if (isDark) Color.Black.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.08f)
-
-    val blurModifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        Modifier.blur(26.dp)
-    } else {
-        Modifier
-    }
 
     return this
         .shadow(elevation = elevation, shape = shape, spotColor = shadowColor, ambientColor = shadowColor)
@@ -256,7 +249,7 @@ fun GroupedRow(
                     trailingContent()
                 } else if (showArrow && onClick != null) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack, // Mirrored for RTL
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos, // در RTL به سمت چپ اشاره می‌کند
                         contentDescription = null,
                         tint = LiquidTheme.textSecondary.copy(alpha = 0.6f),
                         modifier = Modifier.size(16.dp)
@@ -305,11 +298,12 @@ fun LiquidSectionHeader(
                 color = LiquidTheme.accentColor,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null
+                        indication = ripple()
                     ) { onActionClick() }
-                    .padding(4.dp)
+                    .padding(horizontal = 10.dp, vertical = 12.dp)
             )
         }
     }
@@ -340,6 +334,8 @@ fun GradientHeroCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(gradient)
+                // لایه تیره ملایم تا متن سفید روی پالت‌های روشن (طلایی، سایبر، ...) خوانا بماند
+                .background(Color.Black.copy(alpha = 0.32f))
                 .border(
                     BorderStroke(
                         1.dp,
@@ -546,7 +542,7 @@ fun LiquidPrimaryButton(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = if (enabled) LiquidTheme.onAccent else LiquidTheme.textSecondary,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -555,7 +551,7 @@ fun LiquidPrimaryButton(
                 text = text,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = if (enabled) LiquidTheme.onAccent else LiquidTheme.textSecondary
             )
         }
     }
@@ -635,7 +631,7 @@ fun LiquidBottomBar(
                         )
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
-                            indication = null
+                            indication = ripple()
                         ) { onNavigate(screen.route) },
                     contentAlignment = Alignment.Center
                 ) {
@@ -738,7 +734,7 @@ fun LiquidSearchField(
             if (value.isNotEmpty()) {
                 IconButton(
                     onClick = { onValueChange("") },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
@@ -809,9 +805,18 @@ fun LiquidInputField(
                             color = LiquidTheme.textSecondary.copy(alpha = 0.5f)
                         )
                     }
+                    val isNumeric = keyboardOptions.keyboardType == KeyboardType.Number ||
+                        keyboardOptions.keyboardType == KeyboardType.Decimal
                     BasicTextField(
                         value = value,
-                        onValueChange = onValueChange,
+                        // کیبورد فارسی ارقام فارسی تایپ می‌کند؛ برای پردازش به لاتین تبدیل می‌شود
+                        onValueChange = { typed ->
+                            onValueChange(
+                                if (isNumeric) {
+                                    PersianNumberHelper.toEnglishDigits(typed).replace('٫', '.').replace(',', '.')
+                                } else typed
+                            )
+                        },
                         singleLine = singleLine,
                         keyboardOptions = keyboardOptions,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(
@@ -851,7 +856,7 @@ fun LiquidSwitch(
         label = "switch_thumb"
     )
 
-    val trackColor = if (checked) LiquidTheme.accentColor else Color(0xFF787880).copy(alpha = 0.35f)
+    val trackColor = if (checked) LiquidTheme.accentColor else SwitchTrackOff.copy(alpha = 0.35f)
 
     Box(
         modifier = modifier
@@ -879,13 +884,13 @@ fun LiquidSegmentedControl(
     onSelectIndex: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (LiquidTheme.isDark) Color(0xFF1C1C1E).copy(alpha = 0.75f) else Color(0xFFE5E5EA).copy(alpha = 0.85f)
+    val bg = if (LiquidTheme.isDark) DarkCard.copy(alpha = 0.75f) else LightCardElevated.copy(alpha = 0.85f)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(44.dp),
-        shape = RoundedCornerShape(22.dp),
+            .height(48.dp),
+        shape = RoundedCornerShape(24.dp),
         color = bg
     ) {
         Row(
@@ -903,7 +908,7 @@ fun LiquidSegmentedControl(
                         .clip(RoundedCornerShape(18.dp))
                         .background(
                             if (isSelected) {
-                                if (LiquidTheme.isDark) Color(0xFF2C2C2E) else Color.White
+                                if (LiquidTheme.isDark) DarkCardElevated else LightCard
                             } else Color.Transparent
                         )
                         .clickable { onSelectIndex(index) },
@@ -935,7 +940,7 @@ fun LiquidStepper(
     val cardBg = if (LiquidTheme.isDark) DarkCardElevated else LightCardElevated
     Row(
         modifier = modifier
-            .height(44.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(cardBg),
         verticalAlignment = Alignment.CenterVertically
@@ -945,7 +950,7 @@ fun LiquidStepper(
                 val newVal = (value - step).coerceAtLeast(min)
                 onValueChange(newVal)
             },
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(48.dp)
         ) {
             Icon(Icons.Filled.Remove, contentDescription = "کاهش", tint = LiquidTheme.textPrimary)
         }
@@ -974,7 +979,7 @@ fun LiquidStepper(
                 val newVal = (value + step).coerceAtMost(max)
                 onValueChange(newVal)
             },
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(48.dp)
         ) {
             Icon(Icons.Filled.Add, contentDescription = "افزایش", tint = LiquidTheme.textPrimary)
         }
@@ -1043,7 +1048,7 @@ fun LiquidCircleButton(
 ) {
     Box(
         modifier = modifier
-            .size(44.dp)
+            .size(48.dp)
             .liquidGlass(shape = CircleShape, elevation = 3.dp)
             .liquidTapEffect { onClick() },
         contentAlignment = Alignment.Center
@@ -1325,7 +1330,7 @@ fun LiquidRestTimerDock(
                 ) {
                     Surface(
                         modifier = Modifier
-                            .height(34.dp)
+                            .height(44.dp)
                             .liquidTapEffect { onAdd15Seconds() },
                         shape = CircleShape,
                         color = LiquidTheme.accentColor.copy(alpha = 0.16f)
@@ -1345,7 +1350,7 @@ fun LiquidRestTimerDock(
 
                     IconButton(
                         onClick = onCancel,
-                        modifier = Modifier.size(34.dp)
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
@@ -1467,7 +1472,7 @@ fun LiquidTimePickerDialog(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             IconButton(
                                 onClick = { selectedHour = (selectedHour + 1) % 24 },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(44.dp)
                             ) {
                                 Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش ساعت", tint = LiquidTheme.accentColor)
                             }
@@ -1479,7 +1484,7 @@ fun LiquidTimePickerDialog(
                             )
                             IconButton(
                                 onClick = { selectedHour = if (selectedHour == 0) 23 else selectedHour - 1 },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(44.dp)
                             ) {
                                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش ساعت", tint = LiquidTheme.accentColor)
                             }
@@ -1498,7 +1503,7 @@ fun LiquidTimePickerDialog(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             IconButton(
                                 onClick = { selectedMinute = (selectedMinute + 5) % 60 },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(44.dp)
                             ) {
                                 Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "افزایش دقیقه", tint = LiquidTheme.accentColor)
                             }
@@ -1510,7 +1515,7 @@ fun LiquidTimePickerDialog(
                             )
                             IconButton(
                                 onClick = { selectedMinute = if (selectedMinute < 5) 55 else selectedMinute - 5 },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(44.dp)
                             ) {
                                 Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "کاهش دقیقه", tint = LiquidTheme.accentColor)
                             }
@@ -1542,7 +1547,7 @@ fun LiquidTimePickerDialog(
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(36.dp)
+                                .height(44.dp)
                                 .liquidTapEffect {
                                     selectedHour = time.first
                                     selectedMinute = time.second
@@ -1555,7 +1560,7 @@ fun LiquidTimePickerDialog(
                                     text = label,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = if (isCurr) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isCurr) Color.White else LiquidTheme.textPrimary
+                                    color = if (isCurr) LiquidTheme.onAccent else LiquidTheme.textPrimary
                                 )
                             }
                         }
