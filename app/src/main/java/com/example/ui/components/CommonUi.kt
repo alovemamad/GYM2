@@ -57,14 +57,15 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.Role
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeChild
 import com.example.ui.theme.*
 import com.example.util.JalaliCalendar
 import com.example.util.PersianNumberHelper
@@ -73,9 +74,46 @@ import com.example.util.PersianNumberHelper
 // 1. LIQUID GLASS CONTAINER & MODIFIER
 // ==========================================
 
-/** بلور واقعی فقط روی API 31+ کار می‌کند؛ پایین‌تر از آن لایه شیشه کدرتر می‌شود تا خوانایی حفظ شود. */
+/** HazeState مشترک پس‌زمینه‌ی برنامه. اگر null باشد (مثلاً داخل Dialog) شیشه بدون بلور پشتی کشیده می‌شود. */
+val LocalHazeState = compositionLocalOf<HazeState?> { null }
+
+/** فاز ۰..۱ انیمیشن نور روی شیشه؛ فقط در مرحله‌ی draw خوانده می‌شود تا recomposition ایجاد نکند. */
+val LocalGlassPhase = compositionLocalOf<State<Float>> { mutableStateOf(0f) }
+
+/** بلور پشت شیشه فقط روی API 31+ واقعی است؛ پایین‌تر Haze خودش به scrim برمی‌گردد. */
 private val supportsBlur: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+/**
+ * ریشه‌ی شیشه: پس‌زمینه‌ی رنگی را «منبع Haze» می‌کند و شیشه‌ها (hazeChild) همان را تار می‌کنند.
+ * باید یک بار، بالای کل برنامه، گذاشته شود (در GymTheme انجام شده است).
+ */
+@Composable
+fun LiquidGlassRoot(content: @Composable () -> Unit) {
+    val hazeState = remember { HazeState() }
+    val transition = rememberInfiniteTransition(label = "glass_phase")
+    val phase = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(7000, easing = LinearEasing)),
+        label = "glass_phase_value"
+    )
+    CompositionLocalProvider(
+        LocalHazeState provides hazeState,
+        LocalGlassPhase provides phase
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // فقط پس‌زمینه منبع Haze است؛ کارت‌ها خودشان در لایه‌ی بالاتر و همتراز (sibling) قرار می‌گیرند
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .haze(state = hazeState)
+                    .liquidBackdrop()
+            )
+            content()
+        }
+    }
+}
 
 /** گرادیان سفید روی لبه: نور از بالا-چپ می‌تابد و به سمت پایین-راست محو می‌شود (همان inset highlight در CSS). */
 fun glassSpecularBrush(strength: Float = 0.5f): Brush = Brush.linearGradient(
@@ -84,54 +122,94 @@ fun glassSpecularBrush(strength: Float = 0.5f): Brush = Brush.linearGradient(
     1f to Color.White.copy(alpha = (strength * 0.35f).coerceIn(0f, 1f))
 )
 
-/** پس‌زمینه‌ی رنگی ملایم پشت صفحه؛ شیشه روی زمینه‌ی تخت خوب دیده نمی‌شود. */
+/** پس‌زمینه‌ی رنگی (مش گرادیان) پشت صفحه؛ جایگزین‌پذیر با تصویر. شیشه روی زمینه‌ی تخت دیده نمی‌شود. */
 @Composable
 fun Modifier.liquidBackdrop(): Modifier {
     val isDark = LiquidTheme.isDark
     val base = LiquidTheme.backgroundNeutral
     val accent = LiquidTheme.accentColor
-    val a1 = accent.copy(alpha = if (isDark) 0.28f else 0.22f)
-    val a2 = LiquidTheme.palette.gradientEnd.copy(alpha = if (isDark) 0.30f else 0.12f)
+    val a1 = accent.copy(alpha = if (isDark) 0.55f else 0.40f)
+    val a2 = LiquidTheme.palette.gradientEnd.copy(alpha = if (isDark) 0.55f else 0.22f)
+    val a3 = LiquidTheme.palette.gradientStart.copy(alpha = if (isDark) 0.30f else 0.25f)
     return this.drawBehind {
         drawRect(base)
         drawRect(
             Brush.radialGradient(
-                colors = listOf(a1, Color.Transparent),
-                center = Offset(size.width * 0.15f, size.height * 0.08f),
-                radius = size.maxDimension * 0.6f
+                listOf(a1, Color.Transparent),
+                center = Offset(size.width * 0.10f, size.height * 0.10f),
+                radius = size.maxDimension * 0.55f
             )
         )
         drawRect(
             Brush.radialGradient(
-                colors = listOf(a2, Color.Transparent),
-                center = Offset(size.width * 0.95f, size.height * 0.85f),
+                listOf(a2, Color.Transparent),
+                center = Offset(size.width * 0.95f, size.height * 0.55f),
                 radius = size.maxDimension * 0.55f
+            )
+        )
+        drawRect(
+            Brush.radialGradient(
+                listOf(a3, Color.Transparent),
+                center = Offset(size.width * 0.30f, size.height * 0.95f),
+                radius = size.maxDimension * 0.5f
             )
         )
     }
 }
 
+/**
+ * شیشه‌ی مایع: [Haze] پشت شیشه را تار می‌کند و محتوای داخل شیشه شارپ می‌ماند؛
+ * سپس ته‌رنگ سفید، لایه‌ی نور متحرک (جایگزین distortion) و لبه‌ی نورانی گرادیانی.
+ */
 @Composable
 fun Modifier.liquidGlass(
     shape: Shape = RoundedCornerShape(28.dp),
     tintAlpha: Float? = null,
     borderAlpha: Float = 0.25f,
     elevation: Dp = 6.dp,
-    baseAlpha: Float? = null
+    baseAlpha: Float? = null,
+    blurRadius: Dp = 20.dp
 ): Modifier {
     val isDark = LiquidTheme.isDark
-    val baseAlpha = baseAlpha ?: if (supportsBlur) 0.55f else 0.72f
-    val baseBg = (if (isDark) GlassBaseDark else GlassBaseLight).copy(alpha = baseAlpha)
-    val tint = Color.White.copy(alpha = tintAlpha ?: if (isDark) 0.08f else 0.65f)
+    val hazeState = LocalHazeState.current
+    val phase = LocalGlassPhase.current
+    val hasBackdropBlur = hazeState != null && supportsBlur
+
+    // وقتی بلور پشتی هست شیشه شفاف‌تر است؛ وگرنه کدرتر تا خوانا بماند
+    val fillAlpha = baseAlpha ?: if (hasBackdropBlur) 0.18f else 0.72f
+    val baseBg = (if (isDark) GlassBaseDark else GlassBaseLight).copy(alpha = fillAlpha)
+    val tint = Color.White.copy(alpha = tintAlpha ?: if (isDark) 0.08f else 0.40f)
     val tintBrush = Brush.verticalGradient(listOf(tint, tint.copy(alpha = tint.alpha * 0.55f)))
     val highlight = if (isDark) borderAlpha else (borderAlpha + 0.5f).coerceAtMost(0.95f)
     val shadowColor = if (isDark) Color.Black.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.10f)
+    val surface = LiquidTheme.backgroundNeutral
+
+    val haze: Modifier = if (hazeState != null) {
+        Modifier.hazeChild(state = hazeState, shape = shape) {
+            this.blurRadius = blurRadius
+            this.backgroundColor = surface
+            this.noiseFactor = 0.04f
+        }
+    } else Modifier
 
     return this
         .shadow(elevation = elevation, shape = shape, spotColor = shadowColor, ambientColor = shadowColor)
         .clip(shape)
+        .then(haze)
         .background(baseBg)
         .background(tintBrush)
+        .drawBehind {
+            // لایه‌ی نور متحرک: یک نوار مورب سفید کم‌رنگ که آهسته روی سطح شیشه می‌لغزد
+            val w = size.width
+            val x = (phase.value * 2.2f - 0.6f) * w
+            drawRect(
+                Brush.linearGradient(
+                    colors = listOf(Color.Transparent, Color.White.copy(alpha = if (isDark) 0.10f else 0.22f), Color.Transparent),
+                    start = Offset(x, 0f),
+                    end = Offset(x + w * 0.55f, size.height)
+                )
+            )
+        }
         .border(BorderStroke(1.dp, glassSpecularBrush(highlight)), shape = shape)
 }
 
@@ -150,9 +228,7 @@ fun LiquidGlassBox(
 
 /**
  * [۱] کارت شیشه‌ای — معادل glass-card.
- * لایه‌ها: filter (بلور ۴dp روی API 31+) ← overlay ← specular ← content
- * توجه: Modifier.blur در Compose «محتوای خودِ همان نود» را بلور می‌کند، نه پشت آن را (برخلاف backdrop-filter).
- * برای همین بلور فقط روی لایه‌ی پس‌زمینه است و متن واضح می‌ماند.
+ * بلور پشت شیشه با Haze انجام می‌شود (نه Modifier.blur)، پس متن‌های داخل کارت شارپ می‌مانند.
  */
 @Composable
 fun LiquidGlassCard(
@@ -168,17 +244,6 @@ fun LiquidGlassCard(
             .liquidTapEffect(enabled = onClick != null) { onClick?.invoke() }
             .liquidGlass(shape = shape, elevation = elevation)
     ) {
-        // filter layer
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .then(if (supportsBlur) Modifier.blur(4.dp, BlurredEdgeTreatment(shape)) else Modifier)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.10f), Color.Transparent)
-                    )
-                )
-        )
         // content
         Column(modifier = Modifier.padding(contentPadding), content = content)
     }
@@ -1348,6 +1413,7 @@ fun LiquidAlertDialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        CompositionLocalProvider(LocalHazeState provides null) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1451,6 +1517,7 @@ fun LiquidAlertDialog(
                     }
                 }
             }
+        }
         }
     }
 }
