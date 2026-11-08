@@ -31,6 +31,16 @@ fun onColorFor(background: Color): Color {
     return if (whiteContrast >= darkContrast) Color.White else Color(0xFF111113)
 }
 
+/** چرخاندن رنگ‌مایه (hue) برای ساخت طیف هم‌خانواده از رنگ اصلی پالت. */
+fun Color.shiftHue(degrees: Float, satMul: Float = 1f, valMul: Float = 1f): Color {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(this.toArgb(), hsv)
+    hsv[0] = ((hsv[0] + degrees) % 360f + 360f) % 360f
+    hsv[1] = (hsv[1] * satMul).coerceIn(0f, 1f)
+    hsv[2] = (hsv[2] * valMul).coerceIn(0f, 1f)
+    return Color(android.graphics.Color.HSVToColor(hsv))
+}
+
 val LocalLiquidPalette = compositionLocalOf { LiquidPalettes.SPORT_RED }
 val LocalIsDarkTheme = compositionLocalOf { true }
 
@@ -49,6 +59,36 @@ object LiquidTheme {
         @Composable
         @ReadOnlyComposable
         get() = palette.getAccent(isDark)
+
+    // رنگ آیکون‌ها و برجسته‌سازی‌ها: همگی از پالت انتخابی کاربر ساخته می‌شوند
+    val iconRed: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = accentColor
+    val iconOrange: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = accentColor.shiftHue(24f)
+    val iconGreen: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = accentColor.shiftHue(-24f, valMul = 1.05f)
+    val iconBlue: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = accentColor.shiftHue(48f, 0.92f)
+    val iconCyan: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = accentColor.shiftHue(-48f, 0.9f)
+    val iconPurple: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = accentColor.shiftHue(72f, 0.85f)
+    val iconIndigo: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = accentColor.shiftHue(-72f, 0.85f)
 
     val onAccent: Color
         @Composable
