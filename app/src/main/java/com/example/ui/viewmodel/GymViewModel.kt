@@ -9,6 +9,7 @@ import com.example.data.repository.GymRepository
 import com.example.util.AiExportHelper
 import com.example.util.BackupHelper
 import com.example.util.JalaliCalendar
+import com.example.util.NotificationHelper
 import com.example.util.ReminderScheduler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -196,7 +197,8 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
                     if (enabled) {
                         ReminderScheduler.scheduleDailyReminder(
                             app, ReminderScheduler.ID_WORKOUT, timeStr,
-                            "وقت تمرین و باشگاه!", "امروز روز ساختن بدنی قوی‌تر است. برنامه‌ی تمرینت منتظرته!"
+                            "وقت تمرین و باشگاه!", "امروز روز ساختن بدنی قوی‌تر است. برنامه‌ی تمرینت منتظرته!",
+                            NotificationHelper.CHANNEL_WORKOUT
                         )
                     } else {
                         ReminderScheduler.cancelReminder(app, ReminderScheduler.ID_WORKOUT)
@@ -207,7 +209,8 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
                     if (enabled) {
                         ReminderScheduler.scheduleDailyReminder(
                             app, ReminderScheduler.ID_WATER, timeStr,
-                            "یادآور نوشیدن آب", "هیدراته بمانید! یک لیوان آب خنک بنوشید."
+                            "یادآور نوشیدن آب", "هیدراته بمانید! یک لیوان آب خنک بنوشید.",
+                            NotificationHelper.CHANNEL_WATER
                         )
                     } else {
                         ReminderScheduler.cancelReminder(app, ReminderScheduler.ID_WATER)
@@ -218,7 +221,8 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
                     if (enabled) {
                         ReminderScheduler.scheduleDailyReminder(
                             app, ReminderScheduler.ID_SUPPLEMENT, timeStr,
-                            "یادآور مصرف مکمل‌ها", "زمان مصرف مکمل‌های روزانه فرا رسیده است."
+                            "یادآور مصرف مکمل‌ها", "زمان مصرف مکمل‌های روزانه فرا رسیده است.",
+                            NotificationHelper.CHANNEL_SUPPLEMENT
                         )
                     } else {
                         ReminderScheduler.cancelReminder(app, ReminderScheduler.ID_SUPPLEMENT)
@@ -230,10 +234,10 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
 
     fun triggerTestNotification() {
         val app = getApplication<Application>()
-        com.example.util.NotificationHelper.showNotification(
+        NotificationHelper.showNotification(
             context = app,
             notificationId = 999,
-            channelId = com.example.util.NotificationHelper.CHANNEL_REMINDERS,
+            channelId = NotificationHelper.CHANNEL_REMINDERS,
             title = "اعلان تستی GYM",
             message = "سیستم اعلان‌ها و یادآورها به درستی فعال است!"
         )

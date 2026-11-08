@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.*
 import com.example.util.JalaliCalendar
+import com.example.util.AlertType
 import com.example.util.NotificationHelper
 import com.example.util.ReminderScheduler
 import kotlinx.coroutines.Job
@@ -257,13 +258,14 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                         _exercisesState.value = curList
 
                         val app = getApplication<Application>()
-                        NotificationHelper.playAlarmSoundAndVibrate(app)
+                        NotificationHelper.playAlarmSoundAndVibrate(app, AlertType.EXERCISE_END)
                         NotificationHelper.showNotification(
                             context = app,
                             notificationId = 888,
-                            channelId = NotificationHelper.CHANNEL_REST_TIMER,
+                            channelId = NotificationHelper.CHANNEL_EXERCISE_END,
                             title = "پایان حرکت ${curEx.exercise.name}!",
-                            message = "زمان این ست به پایان رسید. آفرین، ست با موفقیت ثبت شد!"
+                            message = "زمان این ست به پایان رسید. آفرین، ست با موفقیت ثبت شد!",
+                            silent = true
                         )
 
                         completeSet(exerciseIndex, setIndex)
@@ -300,14 +302,23 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
                 _restSecondsRemaining.value -= 1
                 _totalRestSecondsUsed.value += 1
             }
+            val finishedNaturally = _isRestTimerActive.value && _restSecondsRemaining.value <= 0
             _isRestTimerActive.value = false
-            val app = getApplication<Application>()
-            NotificationHelper.playAlarmSoundAndVibrate(app)
+            if (finishedNaturally) {
+                val app = getApplication<Application>()
+                // صدا را خود برنامه پخش می‌کند؛ آلارم زمان‌بندی‌شده لغو می‌شود تا دوبار پخش نشود
+                ReminderScheduler.cancelReminder(app, ReminderScheduler.ID_REST_TIMER)
+                NotificationHelper.playAlarmSoundAndVibrate(app, AlertType.REST_END)
+            }
         }
     }
 
     fun addRestTime(secondsToAdd: Int = 15) {
         _restSecondsRemaining.value += secondsToAdd
+        // آلارم زمان‌بندی‌شده هم باید با زمان جدید هماهنگ شود
+        if (_isRestTimerActive.value) {
+            ReminderScheduler.scheduleRestTimer(getApplication(), _restSecondsRemaining.value.toLong())
+        }
     }
 
     fun cancelRestTimer() {
