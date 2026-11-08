@@ -27,7 +27,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.local.WorkoutExercise
 import com.example.data.local.WorkoutPlan
 import com.example.ui.components.LiquidBottomBar
-import com.example.ui.components.liquidBackdrop
 import com.example.ui.components.LiquidRestTimerDock
 import com.example.ui.navigation.Screen
 import com.example.ui.screens.*
@@ -179,7 +178,6 @@ class MainActivity : ComponentActivity() {
                             currentScreen = Screen.Dashboard.route
                         }
                         Scaffold(
-                            modifier = Modifier.liquidBackdrop(),
                             containerColor = androidx.compose.ui.graphics.Color.Transparent,
                             // هر صفحه نوار بالای خودش را با پدینگ status bar دارد؛ پدینگ دوبل نشود
                             contentWindowInsets = WindowInsets(0, 0, 0, 0),
