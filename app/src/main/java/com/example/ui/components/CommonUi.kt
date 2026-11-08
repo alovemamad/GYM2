@@ -35,6 +35,8 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -52,6 +54,12 @@ import com.example.util.PersianNumberHelper
 // 1. LIQUID GLASS CONTAINER & MODIFIER
 // ==========================================
 
+/**
+ * LiquidGlass modifier:
+ * Applies backdrop blur (RenderEffect on API 31+, fallback translucent),
+ * tint, subtle 1dp gradient highlight border (lighter at top, transparent at bottom),
+ * and soft ambient drop shadow.
+ */
 @Composable
 fun Modifier.liquidGlass(
     shape: Shape = RoundedCornerShape(28.dp),
@@ -95,6 +103,9 @@ fun Modifier.liquidGlass(
         .border(BorderStroke(1.dp, borderBrush), shape = shape)
 }
 
+/**
+ * LiquidGlassBox component for floating surfaces
+ */
 @Composable
 fun LiquidGlassBox(
     modifier: Modifier = Modifier,
@@ -108,12 +119,18 @@ fun LiquidGlassBox(
     )
 }
 
+/**
+ * Interactive Liquid Tap Animation:
+ * Smooth scale down to 0.96 and spring back on tap.
+ */
 @Composable
 fun Modifier.liquidTapEffect(
     enabled: Boolean = true,
     onClick: () -> Unit
 ): Modifier {
     var isPressed by remember { mutableStateOf(false) }
+    val currentOnClick by rememberUpdatedState(onClick)
+    val haptic = LocalHapticFeedback.current
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.96f else 1f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = 400f),
@@ -129,7 +146,10 @@ fun Modifier.liquidTapEffect(
                     tryAwaitRelease()
                     isPressed = false
                 },
-                onTap = { onClick() }
+                onTap = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    currentOnClick()
+                }
             )
         }
 }
@@ -138,6 +158,10 @@ fun Modifier.liquidTapEffect(
 // 2. SOLID INSET GROUPED LIST & ROWS
 // ==========================================
 
+/**
+ * Inset Grouped Solid Card Container:
+ * Solid background (#FFFFFF light, #1C1C1E dark) with 24dp squircle corners.
+ */
 @Composable
 fun SolidGroupedCard(
     modifier: Modifier = Modifier,
@@ -163,6 +187,10 @@ fun SolidGroupedCard(
     }
 }
 
+/**
+ * GroupedRow:
+ * Single item in an Inset Grouped Card with optional semantic icon, title, value text, and RTL arrow.
+ */
 @Composable
 fun GroupedRow(
     title: String,
@@ -249,7 +277,7 @@ fun GroupedRow(
                     trailingContent()
                 } else if (showArrow && onClick != null) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack, // Mirrored for RTL
                         contentDescription = null,
                         tint = LiquidTheme.textSecondary.copy(alpha = 0.6f),
                         modifier = Modifier.size(16.dp)
@@ -270,6 +298,10 @@ fun GroupedRow(
     }
 }
 
+/**
+ * Section Header:
+ * 15sp secondary label on start, optional accent action on end.
+ */
 @Composable
 fun LiquidSectionHeader(
     title: String,
@@ -312,6 +344,10 @@ fun LiquidSectionHeader(
 // 3. GRADIENT HERO CARDS & CONTENT ROWS
 // ==========================================
 
+/**
+ * GradientHeroCard:
+ * 28dp squircle, palette gradient, white headline (22-26sp), subtitle and action.
+ */
 @Composable
 fun GradientHeroCard(
     title: String,
@@ -387,6 +423,10 @@ fun GradientHeroCard(
     }
 }
 
+/**
+ * CircularShortcut:
+ * 76dp circle with icon & label below it, fluid spring tap.
+ */
 @Composable
 fun CircularShortcut(
     icon: ImageVector,
@@ -427,6 +467,10 @@ fun CircularShortcut(
     }
 }
 
+/**
+ * ContentRow:
+ * 12dp rounded square (56-64dp) with gradient & icon, title, accent subtitle, trailing action.
+ */
 @Composable
 fun ContentRow(
     title: String,
@@ -513,6 +557,9 @@ fun ContentRow(
 // 4. BUTTONS & INPUT FIELDS
 // ==========================================
 
+/**
+ * LiquidPrimaryButton: 52dp full pill with accent color
+ */
 @Composable
 fun LiquidPrimaryButton(
     text: String,
@@ -554,6 +601,9 @@ fun LiquidPrimaryButton(
     }
 }
 
+/**
+ * LiquidSecondaryButton: Pill button with 14% accent tint & accent text
+ */
 @Composable
 fun LiquidSecondaryButton(
     text: String,
@@ -593,6 +643,9 @@ fun LiquidSecondaryButton(
     }
 }
 
+/**
+ * Liquid Glass Floating Bottom Navigation Bar (72dp capsule, 16dp margin, 5 tabs)
+ */
 @Composable
 fun LiquidBottomBar(
     currentRoute: String,
@@ -655,6 +708,9 @@ fun LiquidBottomBar(
     }
 }
 
+/**
+ * LiquidDestructiveButton: Red destructive action pill
+ */
 @Composable
 fun LiquidDestructiveButton(
     text: String,
@@ -680,6 +736,9 @@ fun LiquidDestructiveButton(
     }
 }
 
+/**
+ * LiquidSearchField: 52dp pill, card background, leading search icon
+ */
 @Composable
 fun LiquidSearchField(
     value: String,
@@ -749,6 +808,9 @@ fun LiquidSearchField(
     }
 }
 
+/**
+ * LiquidInputField: Consistent 52dp card pill text/numeric field
+ */
 @Composable
 fun LiquidInputField(
     value: String,
@@ -832,6 +894,9 @@ fun LiquidInputField(
 // 5. CONTROLS (SWITCH, SEGMENT, STEPPER, PROGRESS)
 // ==========================================
 
+/**
+ * iOS Style Switch (51 x 31 with white thumb)
+ */
 @Composable
 fun LiquidSwitch(
     checked: Boolean,
@@ -865,6 +930,9 @@ fun LiquidSwitch(
     }
 }
 
+/**
+ * Liquid Segmented Control with sliding glass pill indicator
+ */
 @Composable
 fun LiquidSegmentedControl(
     items: List<String>,
@@ -915,6 +983,9 @@ fun LiquidSegmentedControl(
     }
 }
 
+/**
+ * LiquidStepper: Stepper control for numeric adjustments (+ / -)
+ */
 @Composable
 fun LiquidStepper(
     value: Double,
@@ -974,6 +1045,9 @@ fun LiquidStepper(
     }
 }
 
+/**
+ * Liquid Progress Ring
+ */
 @Composable
 fun LiquidProgressRing(
     progressPercent: Int,
@@ -1026,6 +1100,9 @@ fun LiquidProgressRing(
 // 6. TOP BAR & BOTTOM BAR (LIQUID GLASS)
 // ==========================================
 
+/**
+ * 44dp circular glass button for top bar
+ */
 @Composable
 fun LiquidCircleButton(
     icon: ImageVector,
@@ -1058,6 +1135,9 @@ fun LiquidCircleButton(
     }
 }
 
+/**
+ * Compact Inline Liquid Glass Top Bar (Height ~56dp, title 20sp centered)
+ */
 @Composable
 fun LiquidTopBar(
     title: String,
@@ -1128,6 +1208,10 @@ fun LiquidTopBar(
 // 7. DIALOGS & BOTTOM SHEETS (LIQUID GLASS)
 // ==========================================
 
+/**
+ * Liquid Glass iOS Alert Dialog:
+ * Centered, 28dp squircle, 17sp bold title, 13sp body, thin hairline dividers.
+ */
 @Composable
 fun LiquidAlertDialog(
     onDismissRequest: () -> Unit,
@@ -1250,6 +1334,9 @@ fun LiquidAlertDialog(
     }
 }
 
+/**
+ * Liquid Glass Floating Rest Timer Dock Capsule
+ */
 @Composable
 fun LiquidRestTimerDock(
     remainingSeconds: Int,
@@ -1352,6 +1439,9 @@ fun LiquidRestTimerDock(
     }
 }
 
+/**
+ * EmptyStateCard with Solid Grouped style
+ */
 @Composable
 fun EmptyStateCard(
     icon: ImageVector,
@@ -1416,6 +1506,10 @@ fun EmptyStateCard(
     }
 }
 
+/**
+ * LiquidTimePickerDialog:
+ * A modern iOS 27 glass-style time picker dialog with hour/minute steppers and quick time presets.
+ */
 @Composable
 fun LiquidTimePickerDialog(
     initialTime: String,
@@ -1430,7 +1524,6 @@ fun LiquidTimePickerDialog(
     LiquidAlertDialog(
         onDismissRequest = onDismissRequest,
         title = title,
-        message = "",
         confirmText = "تأیید و ذخیره",
         dismissText = "انصراف",
         onConfirm = {
@@ -1558,3 +1651,4 @@ fun LiquidTimePickerDialog(
         }
     )
 }
+
