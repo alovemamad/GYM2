@@ -22,6 +22,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import kotlinx.coroutines.delay
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -61,9 +68,12 @@ val LocalHazeState = compositionLocalOf<HazeState?> { null }
 // 1. LIQUID GLASS BASE MODIFIERS & ROOT
 // ==========================================
 
+// فاز زمانی مشترک برای حرکت آرام نور و جلوه‌های مایع (۰..۱ تکرارشونده)
+val LocalGlassPhase = compositionLocalOf<State<Float>> { mutableStateOf(0f) }
+
 /**
- * Root container providing the signature botanical organic backdrop and Haze blur context.
- * Matches Snipzy Live Preview screenshots exactly.
+ * Root container: botanical backdrop (slow liquid drift), palette-tinted atmosphere,
+ * and a touch-following "liquid lens" like the reference videos.
  */
 @Composable
 fun LiquidGlassRoot(
@@ -71,44 +81,154 @@ fun LiquidGlassRoot(
     content: @Composable () -> Unit
 ) {
     val isDark = LiquidTheme.isDark
-    val bgTint = if (isDark) {
-        Color.Black.copy(alpha = 0.42f)
-    } else {
-        Color.White.copy(alpha = 0.12f)
-    }
+    val accent = LiquidTheme.accentColor
+    val palette = LiquidTheme.palette
+    val bgTint = if (isDark) Color.Black.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.12f)
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Dedicated background sibling that captures the botanical texture & lighting for Haze
+    val transition = rememberInfiniteTransition(label = "glass_phase")
+    val phase = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(16000, easing = LinearEasing)),
+        label = "phase"
+    )
+
+    // Touch lens state
+    var touch by remember { mutableStateOf(Offset(0f, 0f)) }
+    var touching by remember { mutableStateOf(false) }
+    val lensPos by animateOffsetAsState(
+        targetValue = touch,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 420f),
+        label = "lens_pos"
+    )
+    val lensAlpha by animateFloatAsState(
+        targetValue = if (touching) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = 260f),
+        label = "lens_alpha"
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .haze(state = hazeState)
         ) {
-            // High-resolution botanical foliage background (matching Snipzy live preview)
             Image(
                 painter = painterResource(id = R.drawable.img_liquid_glass_bg),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val t = phase.value * 2f * PI.toFloat()
+                        scaleX = 1.14f
+                        scaleY = 1.14f
+                        translationX = sin(t) * 18f
+                        translationY = cos(t) * 12f
+                    }
             )
-            // Atmospheric depth overlay
+            Box(modifier = Modifier.fillMaxSize().background(bgTint))
+            // رنگ پالت انتخابی روی کل فضای برنامه می‌نشیند
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(bgTint)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                accent.copy(alpha = if (isDark) 0.30f else 0.22f),
+                                Color.Transparent,
+                                palette.gradientEnd.copy(alpha = if (isDark) 0.30f else 0.14f)
+                            )
+                        )
+                    )
             )
         }
 
-        // Foreground content sibling (contains all liquid glass components)
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val pressed = event.changes.firstOrNull { it.pressed }
+                            if (pressed != null) {
+                                touch = pressed.position
+                                touching = true
+                            } else {
+                                touching = false
+                            }
+                        }
+                    }
+                }
+                .drawWithContent {
+                    drawContent()
+                    if (lensAlpha > 0.01f) {
+                        val r = 44.dp.toPx() * (0.85f + 0.15f * lensAlpha)
+                        // refraction-like body
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.02f * lensAlpha),
+                                    Color.White.copy(alpha = 0.10f * lensAlpha),
+                                    Color.White.copy(alpha = 0.26f * lensAlpha)
+                                ),
+                                center = lensPos,
+                                radius = r
+                            ),
+                            radius = r,
+                            center = lensPos
+                        )
+                        // specular rim
+                        drawCircle(
+                            brush = Brush.sweepGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.85f * lensAlpha),
+                                    Color.White.copy(alpha = 0.12f * lensAlpha),
+                                    Color.White.copy(alpha = 0.55f * lensAlpha),
+                                    Color.White.copy(alpha = 0.12f * lensAlpha),
+                                    Color.White.copy(alpha = 0.85f * lensAlpha)
+                                ),
+                                center = lensPos
+                            ),
+                            radius = r,
+                            center = lensPos,
+                            style = Stroke(width = 1.6.dp.toPx())
+                        )
+                        // inner touch dot
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.85f * lensAlpha),
+                            radius = 4.5.dp.toPx(),
+                            center = lensPos
+                        )
+                    }
+                }
         ) {
-            CompositionLocalProvider(LocalHazeState provides hazeState) {
+            CompositionLocalProvider(
+                LocalHazeState provides hazeState,
+                LocalGlassPhase provides phase
+            ) {
                 content()
             }
         }
+    }
+}
+
+/** ورود نرم: محو شدن + بالا آمدن + بزرگ شدن فنری. */
+@Composable
+fun Modifier.liquidAppear(delayMs: Int = 0): Modifier {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay(delayMs.toLong())
+        progress.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 260f))
+    }
+    return this.graphicsLayer {
+        val p = progress.value
+        alpha = p.coerceIn(0f, 1f)
+        translationY = (1f - p) * 36f
+        val sc = 0.95f + 0.05f * p
+        scaleX = sc
+        scaleY = sc
     }
 }
 
@@ -126,9 +246,12 @@ fun Modifier.liquidGlass(
     shape: Shape = RoundedCornerShape(22.dp),
     tintAlpha: Float = if (LiquidTheme.isDark) 0.18f else 0.24f,
     elevation: Dp = 8.dp,
-    borderAlpha: Float = if (LiquidTheme.isDark) 0.80f else 0.90f
+    borderAlpha: Float = if (LiquidTheme.isDark) 0.80f else 0.90f,
+    accentTintAlpha: Float = 0.09f
 ): Modifier {
     val isDark = LiquidTheme.isDark
+    val accent = LiquidTheme.accentColor
+    val phase = LocalGlassPhase.current
     val bgColor = if (isDark) Color(0xFF0A120D).copy(alpha = tintAlpha) else Color.White.copy(alpha = tintAlpha)
 
     // Specular border gradient: bright white top-left highlight fading to subtle translucent edge
@@ -137,7 +260,8 @@ fun Modifier.liquidGlass(
             Color.White.copy(alpha = borderAlpha),
             Color.White.copy(alpha = borderAlpha * 0.35f),
             Color.White.copy(alpha = 0.08f),
-            Color.Transparent
+            Color.White.copy(alpha = 0.10f),
+            Color.White.copy(alpha = borderAlpha * 0.38f)
         ),
         start = Offset(0f, 0f),
         end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
@@ -177,6 +301,21 @@ fun Modifier.liquidGlass(
                 Modifier.background(bgColor)
             }
         )
+        .drawBehind {
+            // رنگ پالت روی شیشه
+            drawRect(accent.copy(alpha = accentTintAlpha))
+            // برق نوری که آرام روی شیشه می‌لغزد
+            val w = size.width
+            val h = size.height
+            val x = (phase.value * 2.4f - 0.7f) * (w + h)
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.11f), Color.Transparent),
+                    start = Offset(x - h, 0f),
+                    end = Offset(x, h)
+                )
+            )
+        }
         .background(innerSpecularBrush)
         .border(BorderStroke(1.2.dp, borderBrush), shape = shape)
 }
@@ -227,6 +366,7 @@ fun SolidGroupedCard(
 ) {
     Box(
         modifier = modifier
+            .liquidAppear()
             .fillMaxWidth()
             .liquidGlass(hazeState = hazeState, shape = shape, elevation = 6.dp)
     ) {
@@ -609,8 +749,18 @@ fun LiquidPrimaryButton(
             .liquidGlass(
                 shape = CircleShape,
                 elevation = if (isPressed) 2.dp else 8.dp,
-                tintAlpha = 0.28f,
-                borderAlpha = 0.90f
+                tintAlpha = 0.20f,
+                borderAlpha = 0.90f,
+                accentTintAlpha = 0.0f
+            )
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        LiquidTheme.accentColor.copy(alpha = if (enabled) 0.88f else 0.35f),
+                        LiquidTheme.accentColor.copy(alpha = if (enabled) 0.58f else 0.2f)
+                    )
+                ),
+                CircleShape
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -629,7 +779,7 @@ fun LiquidPrimaryButton(
                 Icon(
                     icon,
                     null,
-                    tint = Color.White,
+                    tint = LiquidTheme.onAccent,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -638,7 +788,7 @@ fun LiquidPrimaryButton(
                 text,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = LiquidTheme.onAccent
             )
         }
     }
@@ -1243,19 +1393,25 @@ fun LiquidBottomBar(
         ) {
             com.example.ui.navigation.Screen.bottomNavItems.forEach { screen ->
                 val selected = currentRoute == screen.route
+                val selBg by animateColorAsState(
+                    if (selected) LiquidTheme.accentColor.copy(alpha = 0.42f) else Color.Transparent,
+                    spring(stiffness = 300f), label = "nav_bg"
+                )
+                val selBorder by animateColorAsState(
+                    if (selected) Color.White.copy(alpha = 0.6f) else Color.Transparent,
+                    spring(stiffness = 300f), label = "nav_border"
+                )
+                val iconScale by animateFloatAsState(
+                    if (selected) 1.18f else 1f,
+                    spring(dampingRatio = 0.45f, stiffness = 380f), label = "nav_scale"
+                )
                 Box(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(28.dp))
-                        .background(
-                            if (selected) Color.White.copy(alpha = 0.22f) else Color.Transparent
-                        )
-                        .border(
-                            if (selected) 1.dp else 0.dp,
-                            if (selected) Color.White.copy(alpha = 0.6f) else Color.Transparent,
-                            RoundedCornerShape(28.dp)
-                        )
+                        .background(selBg)
+                        .border(1.dp, selBorder, RoundedCornerShape(28.dp))
                         .clickable { onNavigate(screen.route) },
                     contentAlignment = Alignment.Center
                 ) {
@@ -1267,7 +1423,7 @@ fun LiquidBottomBar(
                             if (selected) screen.selectedIcon else screen.unselectedIcon,
                             screen.title,
                             tint = if (selected) Color.White else Color.White.copy(alpha = 0.65f),
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(24.dp).scale(iconScale)
                         )
                         Text(
                             screen.title,
