@@ -64,12 +64,12 @@ object LiquidTheme {
     val surfaceSolid: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) DarkCard else LightCard
+        get() = if (isDark) Color.White.copy(alpha = 0.09f) else Color.White.copy(alpha = 0.62f)
 
     val surfaceElevated: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) DarkCardElevated else LightCardElevated
+        get() = if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.06f)
 
     val backgroundNeutral: Color
         @Composable
