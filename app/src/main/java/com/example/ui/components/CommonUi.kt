@@ -412,4 +412,11 @@ fun LiquidTimePickerDialog(initialTime: String, title: String = "انتخاب س
 fun LiquidGlassRoot(content: @Composable () -> Unit) {
     // یک پس‌زمینه گرادیانتی ملایم برای اینکه افکت شیشه دیده بشه
     val bgBrush = Brush.linearGradient(
-        colors = if (LiquidTheme
+        colors = if (LiquidTheme.isDark) {
+            listOf(Color(0xFF0F0F13), Color(0xFF1A1A24), Color(0xFF0F0F13))
+        } else {
+            listOf(Color(0xFFF5F5F7), Color(0xFFE8E8ED), Color(0xFFF5F5F7))
+        }
+    )
+    Box(modifier = Modifier.fillMaxSize().background(bgBrush)) { content() }
+}
