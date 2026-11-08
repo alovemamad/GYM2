@@ -167,8 +167,7 @@ fun Modifier.liquidGlass(
     tintAlpha: Float? = null,
     borderAlpha: Float = 0.25f,
     elevation: Dp = 6.dp,
-    baseAlpha: Float? = null,
-    blurRadius: Dp = 20.dp
+    baseAlpha: Float? = null
 ): Modifier {
     val isDark = LiquidTheme.isDark
     val hazeState = LocalHazeState.current
@@ -182,14 +181,9 @@ fun Modifier.liquidGlass(
     val tintBrush = Brush.verticalGradient(listOf(tint, tint.copy(alpha = tint.alpha * 0.55f)))
     val highlight = if (isDark) borderAlpha else (borderAlpha + 0.5f).coerceAtMost(0.95f)
     val shadowColor = if (isDark) Color.Black.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.10f)
-    val surface = LiquidTheme.backgroundNeutral
 
     val haze: Modifier = if (hazeState != null) {
-        Modifier.hazeChild(state = hazeState, shape = shape) {
-            this.blurRadius = blurRadius
-            this.backgroundColor = surface
-            this.noiseFactor = 0.04f
-        }
+        Modifier.hazeChild(state = hazeState, shape = shape)
     } else Modifier
 
     return this
