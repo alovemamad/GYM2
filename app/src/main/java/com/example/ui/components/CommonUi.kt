@@ -38,9 +38,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.*
 import com.example.util.PersianNumberHelper
-// ایمپورت‌های جدید Haze
+// ایمپورت‌های Haze (نسخه hazeChild)
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeChild
 import dev.chrisbanes.haze.HazeStyle
 
 // ==========================================
@@ -68,8 +68,8 @@ fun Modifier.liquidGlass(
         .clip(shape)
         .then(
             if (hazeState != null) {
-                // استفاده از سینتکس جدید Haze
-                Modifier.hazeEffect(
+                // استفاده از hazeChild که سینتکس پایدارتری دارد
+                Modifier.hazeChild(
                     state = hazeState,
                     style = HazeStyle(
                         backgroundColor = bgColor,
