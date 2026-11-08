@@ -1,10 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.graphics.drawscope.drawText
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -38,6 +34,13 @@ import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.util.JalaliCalendar
 import com.example.util.PersianNumberHelper
+
+// ایمپورت‌های مورد نیاز برای نمودار
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
 
 @Composable
 fun AnalysisScreen(
@@ -732,10 +735,18 @@ fun LiquidLineChart(
                 style = labelStyle
             )
             val lx = if (isRtl) size.width - layout.size.width else 0f
-            drawText(
-                textLayoutResult = layout,
-                topLeft = Offset(lx, (gy - layout.size.height - 2.dp.toPx()).coerceAtLeast(0f))
-            )
+            // استفاده از drawIntoCanvas و nativeCanvas برای رندر متن روی Canvas
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawText(
+                    PersianNumberHelper.formatDecimal(labelValue),
+                    lx,
+                    (gy - layout.size.height - 2.dp.toPx()).coerceAtLeast(0f),
+                    android.graphics.Paint().apply {
+                        color = labelColor.toArgb()
+                        textSize = labelStyle.fontSize.toPx()
+                    }
+                )
+            }
         }
 
         val linePath = Path()
