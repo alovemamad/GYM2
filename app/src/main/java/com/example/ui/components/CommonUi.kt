@@ -46,6 +46,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import android.os.Build
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.Role
 import com.example.ui.theme.*
 import com.example.util.JalaliCalendar
 import com.example.util.PersianNumberHelper
@@ -53,6 +72,44 @@ import com.example.util.PersianNumberHelper
 // ==========================================
 // 1. LIQUID GLASS CONTAINER & MODIFIER
 // ==========================================
+
+/** بلور واقعی فقط روی API 31+ کار می‌کند؛ پایین‌تر از آن لایه شیشه کدرتر می‌شود تا خوانایی حفظ شود. */
+private val supportsBlur: Boolean
+    get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+/** گرادیان سفید روی لبه: نور از بالا-چپ می‌تابد و به سمت پایین-راست محو می‌شود (همان inset highlight در CSS). */
+fun glassSpecularBrush(strength: Float = 0.5f): Brush = Brush.linearGradient(
+    0f to Color.White.copy(alpha = strength.coerceIn(0f, 1f)),
+    0.45f to Color.White.copy(alpha = 0.05f),
+    1f to Color.White.copy(alpha = (strength * 0.35f).coerceIn(0f, 1f))
+)
+
+/** پس‌زمینه‌ی رنگی ملایم پشت صفحه؛ شیشه روی زمینه‌ی تخت خوب دیده نمی‌شود. */
+@Composable
+fun Modifier.liquidBackdrop(): Modifier {
+    val isDark = LiquidTheme.isDark
+    val base = LiquidTheme.backgroundNeutral
+    val accent = LiquidTheme.accentColor
+    val a1 = accent.copy(alpha = if (isDark) 0.28f else 0.22f)
+    val a2 = LiquidTheme.palette.gradientEnd.copy(alpha = if (isDark) 0.30f else 0.12f)
+    return this.drawBehind {
+        drawRect(base)
+        drawRect(
+            Brush.radialGradient(
+                colors = listOf(a1, Color.Transparent),
+                center = Offset(size.width * 0.15f, size.height * 0.08f),
+                radius = size.maxDimension * 0.6f
+            )
+        )
+        drawRect(
+            Brush.radialGradient(
+                colors = listOf(a2, Color.Transparent),
+                center = Offset(size.width * 0.95f, size.height * 0.85f),
+                radius = size.maxDimension * 0.55f
+            )
+        )
+    }
+}
 
 @Composable
 fun Modifier.liquidGlass(
@@ -62,33 +119,19 @@ fun Modifier.liquidGlass(
     elevation: Dp = 6.dp
 ): Modifier {
     val isDark = LiquidTheme.isDark
-    val bgTint = if (isDark) {
-        Color.White.copy(alpha = tintAlpha ?: 0.08f)
-    } else {
-        Color.White.copy(alpha = tintAlpha ?: 0.65f)
-    }
-
-    val baseBg = if (isDark) {
-        GlassBaseDark.copy(alpha = 0.94f)
-    } else {
-        GlassBaseLight.copy(alpha = 0.94f)
-    }
-
-    val borderBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color.White.copy(alpha = if (isDark) borderAlpha else borderAlpha + 0.2f),
-            Color.White.copy(alpha = 0.04f)
-        )
-    )
-
-    val shadowColor = if (isDark) Color.Black.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.08f)
+    val baseAlpha = if (supportsBlur) 0.86f else 0.94f
+    val baseBg = (if (isDark) GlassBaseDark else GlassBaseLight).copy(alpha = baseAlpha)
+    val tint = Color.White.copy(alpha = tintAlpha ?: if (isDark) 0.08f else 0.65f)
+    val tintBrush = Brush.verticalGradient(listOf(tint, tint.copy(alpha = tint.alpha * 0.55f)))
+    val highlight = if (isDark) borderAlpha else (borderAlpha + 0.5f).coerceAtMost(0.95f)
+    val shadowColor = if (isDark) Color.Black.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.10f)
 
     return this
         .shadow(elevation = elevation, shape = shape, spotColor = shadowColor, ambientColor = shadowColor)
         .clip(shape)
         .background(baseBg)
-        .background(bgTint)
-        .border(BorderStroke(1.dp, borderBrush), shape = shape)
+        .background(tintBrush)
+        .border(BorderStroke(1.dp, glassSpecularBrush(highlight)), shape = shape)
 }
 
 @Composable
@@ -104,6 +147,42 @@ fun LiquidGlassBox(
     )
 }
 
+/**
+ * [۱] کارت شیشه‌ای — معادل glass-card.
+ * لایه‌ها: filter (بلور ۴dp روی API 31+) ← overlay ← specular ← content
+ * توجه: Modifier.blur در Compose «محتوای خودِ همان نود» را بلور می‌کند، نه پشت آن را (برخلاف backdrop-filter).
+ * برای همین بلور فقط روی لایه‌ی پس‌زمینه است و متن واضح می‌ماند.
+ */
+@Composable
+fun LiquidGlassCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(20.dp),
+    elevation: Dp = 6.dp,
+    contentPadding: PaddingValues = PaddingValues(20.dp),
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .liquidTapEffect(enabled = onClick != null) { onClick?.invoke() }
+            .liquidGlass(shape = shape, elevation = elevation)
+    ) {
+        // filter layer
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .then(if (supportsBlur) Modifier.blur(4.dp, BlurredEdgeTreatment(shape)) else Modifier)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.10f), Color.Transparent)
+                    )
+                )
+        )
+        // content
+        Column(modifier = Modifier.padding(contentPadding), content = content)
+    }
+}
+
 @Composable
 fun Modifier.liquidTapEffect(
     enabled: Boolean = true,
@@ -113,8 +192,8 @@ fun Modifier.liquidTapEffect(
     val currentOnClick by rememberUpdatedState(onClick)
     val haptic = LocalHapticFeedback.current
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = 400f),
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
         label = "liquid_tap_scale"
     )
 
@@ -525,17 +604,30 @@ fun LiquidPrimaryButton(
     icon: ImageVector? = null,
     enabled: Boolean = true
 ) {
-    Surface(
+    val accent = LiquidTheme.accentColor
+    val shape = CircleShape
+    val fill: Brush = if (enabled) {
+        Brush.verticalGradient(listOf(accent.copy(alpha = 0.96f), accent.copy(alpha = 0.78f)))
+    } else {
+        SolidColor(LiquidTheme.textSecondary.copy(alpha = 0.3f))
+    }
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
-            .liquidTapEffect(enabled = enabled) { onClick() },
-        shape = CircleShape,
-        color = if (enabled) LiquidTheme.accentColor else LiquidTheme.textSecondary.copy(alpha = 0.3f),
-        shadowElevation = if (enabled) 4.dp else 0.dp
+            .liquidTapEffect(enabled = enabled) { onClick() }
+            .shadow(
+                elevation = if (enabled) 8.dp else 0.dp,
+                shape = shape,
+                spotColor = accent.copy(alpha = 0.55f),
+                ambientColor = accent.copy(alpha = 0.25f)
+            )
+            .clip(shape)
+            .background(fill)
+            .border(BorderStroke(1.dp, glassSpecularBrush(if (enabled) 0.75f else 0.2f)), shape),
+        contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -565,16 +657,20 @@ fun LiquidSecondaryButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null
 ) {
-    Surface(
+    val accent = LiquidTheme.accentColor
+    val shape = CircleShape
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
-            .liquidTapEffect { onClick() },
-        shape = CircleShape,
-        color = LiquidTheme.accentColor.copy(alpha = 0.14f)
+            .liquidTapEffect { onClick() }
+            .clip(shape)
+            .background(accent.copy(alpha = 0.14f))
+            .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.10f), Color.Transparent)))
+            .border(BorderStroke(1.dp, glassSpecularBrush(0.45f)), shape),
+        contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -582,7 +678,7 @@ fun LiquidSecondaryButton(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = LiquidTheme.accentColor,
+                    tint = accent,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -591,7 +687,43 @@ fun LiquidSecondaryButton(
                 text = text,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = LiquidTheme.accentColor
+                color = accent
+            )
+        }
+    }
+}
+
+/**
+ * [۲] دکمه‌ی شیشه‌ای خنثی — معادل glass-button (گوشه ۱۲dp، انیمیشن اسپرینگی فشردن).
+ */
+@Composable
+fun LiquidGlassButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    enabled: Boolean = true
+) {
+    Box(
+        modifier = modifier
+            .alpha(if (enabled) 1f else 0.5f)
+            .liquidTapEffect(enabled = enabled) { onClick() }
+            .liquidGlass(shape = RoundedCornerShape(12.dp), elevation = 4.dp)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = LiquidTheme.textPrimary, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = LiquidTheme.textPrimary
             )
         }
     }
@@ -627,7 +759,7 @@ fun LiquidBottomBar(
                         .clip(RoundedCornerShape(26.dp))
                         .background(
                             if (selected) {
-                                if (LiquidTheme.isDark) Color.White.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.85f)
+                                if (LiquidTheme.isDark) Color.White.copy(alpha = 0.20f) else Color.White.copy(alpha = 0.85f)
                             } else Color.Transparent
                         )
                         .clickable(
@@ -684,6 +816,7 @@ fun LiquidDestructiveButton(
     }
 }
 
+/** [۷] نوار جستجوی شیشه‌ای — با فوکوس کمی بالا می‌آید (translateY -2dp) و سایه و لبه‌ی accent می‌گیرد. */
 @Composable
 fun LiquidSearchField(
     value: String,
@@ -692,14 +825,31 @@ fun LiquidSearchField(
     modifier: Modifier = Modifier,
     trailingAction: (@Composable () -> Unit)? = null
 ) {
-    val cardBg = if (LiquidTheme.isDark) DarkCard else LightCard
-    Surface(
+    var focused by remember { mutableStateOf(false) }
+    val lift by animateDpAsState(
+        targetValue = if (focused) (-2).dp else 0.dp,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f),
+        label = "search_lift"
+    )
+    val elevation by animateDpAsState(
+        targetValue = if (focused) 10.dp else 4.dp,
+        animationSpec = spring(stiffness = 500f),
+        label = "search_elevation"
+    )
+    val focusBorderAlpha by animateFloatAsState(
+        targetValue = if (focused) 0.9f else 0f,
+        animationSpec = spring(stiffness = 500f),
+        label = "search_border"
+    )
+    val shape = CircleShape
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp),
-        shape = CircleShape,
-        color = cardBg,
-        shadowElevation = 2.dp
+            .height(52.dp)
+            .offset(y = lift)
+            .liquidGlass(shape = shape, elevation = elevation)
+            .border(BorderStroke(1.5.dp, LiquidTheme.accentColor.copy(alpha = focusBorderAlpha)), shape)
     ) {
         Row(
             modifier = Modifier
@@ -711,7 +861,7 @@ fun LiquidSearchField(
             Icon(
                 imageVector = Icons.Filled.Search,
                 contentDescription = null,
-                tint = LiquidTheme.textSecondary,
+                tint = if (focused) LiquidTheme.accentColor else LiquidTheme.textSecondary,
                 modifier = Modifier.size(22.dp)
             )
 
@@ -727,8 +877,11 @@ fun LiquidSearchField(
                     value = value,
                     onValueChange = onValueChange,
                     singleLine = true,
+                    cursorBrush = SolidColor(LiquidTheme.accentColor),
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = LiquidTheme.textPrimary),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focused = it.isFocused }
                 )
             }
 
@@ -765,13 +918,28 @@ fun LiquidInputField(
     trailingText: String? = null,
     leadingIcon: ImageVector? = null
 ) {
-    val cardBg = if (LiquidTheme.isDark) DarkCardElevated else LightCardElevated
+    var focused by remember { mutableStateOf(false) }
+    val isDark = LiquidTheme.isDark
+    val fieldBg by animateColorAsState(
+        targetValue = when {
+            focused -> if (isDark) Color.White.copy(alpha = 0.16f) else Color.Black.copy(alpha = 0.07f)
+            else -> if (isDark) Color.White.copy(alpha = 0.09f) else Color.Black.copy(alpha = 0.045f)
+        },
+        animationSpec = tween(200),
+        label = "input_bg"
+    )
+    val fieldBorder by animateColorAsState(
+        targetValue = if (focused) LiquidTheme.accentColor else Color.White.copy(alpha = if (isDark) 0.12f else 0.5f),
+        animationSpec = tween(200),
+        label = "input_border"
+    )
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .height(54.dp),
         shape = RoundedCornerShape(18.dp),
-        color = cardBg
+        color = fieldBg,
+        border = BorderStroke(1.dp, fieldBorder)
     ) {
         Row(
             modifier = Modifier
@@ -820,11 +988,14 @@ fun LiquidInputField(
                         },
                         singleLine = singleLine,
                         keyboardOptions = keyboardOptions,
+                        cursorBrush = SolidColor(LiquidTheme.accentColor),
                         textStyle = MaterialTheme.typography.bodyMedium.copy(
                             color = LiquidTheme.textPrimary,
                             fontWeight = FontWeight.SemiBold
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focused = it.isFocused }
                     )
                 }
             }
@@ -845,26 +1016,53 @@ fun LiquidInputField(
 // 5. CONTROLS (SWITCH, SEGMENT, STEPPER, PROGRESS)
 // ==========================================
 
+/** [۱۰] سوییچ شیشه‌ای — ریل شیشه‌ای/accent، دسته‌ی سفید با لبه‌ی نورانی و انیمیشن اسپرینگی. */
 @Composable
 fun LiquidSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val isDark = LiquidTheme.isDark
+    val accent = LiquidTheme.accentColor
+
     val thumbOffset by animateFloatAsState(
         targetValue = if (checked) 20f else 0f,
-        animationSpec = spring(dampingRatio = 0.75f, stiffness = 500f),
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 500f),
         label = "switch_thumb"
     )
+    val thumbScale by animateFloatAsState(
+        targetValue = if (pressed) 1.12f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 600f),
+        label = "switch_thumb_scale"
+    )
+    val trackAlpha by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(stiffness = 500f),
+        label = "switch_track"
+    )
 
-    val trackColor = if (checked) LiquidTheme.accentColor else SwitchTrackOff.copy(alpha = 0.35f)
+    val trackShape = CircleShape
+    val offTrack = if (isDark) Color.White.copy(alpha = 0.16f) else SwitchTrackOff.copy(alpha = 0.32f)
 
     Box(
         modifier = modifier
             .size(width = 51.dp, height = 31.dp)
-            .clip(CircleShape)
-            .background(trackColor)
-            .clickable { onCheckedChange(!checked) }
+            .clip(trackShape)
+            .background(offTrack)
+            .background(
+                Brush.verticalGradient(
+                    listOf(accent.copy(alpha = 0.95f * trackAlpha), accent.copy(alpha = 0.78f * trackAlpha))
+                )
+            )
+            .border(BorderStroke(1.dp, glassSpecularBrush(0.35f)), trackShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Switch
+            ) { onCheckedChange(!checked) }
             .padding(2.dp),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -872,8 +1070,10 @@ fun LiquidSwitch(
             modifier = Modifier
                 .offset(x = thumbOffset.dp)
                 .size(27.dp)
-                .shadow(2.dp, CircleShape)
+                .graphicsLayer { scaleX = thumbScale; scaleY = thumbScale }
+                .shadow(3.dp, CircleShape)
                 .background(Color.White, CircleShape)
+                .border(BorderStroke(1.dp, glassSpecularBrush(0.9f)), CircleShape)
         )
     }
 }
@@ -1648,4 +1848,252 @@ fun LiquidTimePickerDialog(
             }
         }
     )
+}
+
+// ==========================================
+// 9. NEW GLASS COMPONENTS (DROPDOWN, SPINNER, SIDEBAR, ICON)
+// ==========================================
+
+/**
+ * [۳] دراپ‌داون شیشه‌ای — معادل glass-dropdown (باز/بسته شدن با max-height در CSS ← expandVertically).
+ *
+ * LiquidDropdown(title = "گروه عضلانی") {
+ *     LiquidDropdownItem("سینه", selected = sel == 0) { sel = 0 }
+ *     LiquidDropdownItem("پشت", selected = sel == 1) { sel = 1 }
+ * }
+ */
+@Composable
+fun LiquidDropdown(
+    title: String,
+    modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = false,
+    leadingIcon: ImageVector? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
+        label = "dropdown_arrow"
+    )
+    val shape = RoundedCornerShape(16.dp)
+
+    Column(modifier = modifier.fillMaxWidth().liquidGlass(shape = shape, elevation = 4.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = ripple(),
+                    role = Role.DropdownList
+                ) { expanded = !expanded }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (leadingIcon != null) {
+                Icon(leadingIcon, contentDescription = null, tint = LiquidTheme.accentColor, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = LiquidTheme.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                tint = LiquidTheme.textSecondary,
+                modifier = Modifier.rotate(arrowRotation)
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(spring(stiffness = 400f)) + fadeIn(),
+            exit = shrinkVertically(spring(stiffness = 500f)) + fadeOut()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp), content = content)
+        }
+    }
+}
+
+@Composable
+fun LiquidDropdownItem(
+    text: String,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) LiquidTheme.accentColor.copy(alpha = 0.16f) else Color.Transparent)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple()
+            ) { onClick() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) LiquidTheme.accentColor else LiquidTheme.textPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        if (selected) {
+            Icon(Icons.Filled.Check, contentDescription = null, tint = LiquidTheme.accentColor, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/**
+ * [۹] اسپینر شیشه‌ای — حلقه‌ی چرخان (spin، ۱ ثانیه) + هسته‌ی ضربان‌دار (pulse) روی دایره‌ی شیشه‌ای.
+ */
+@Composable
+fun LiquidSpinner(
+    modifier: Modifier = Modifier,
+    size: Dp = 48.dp,
+    color: Color = Color.Unspecified
+) {
+    val tint = if (color == Color.Unspecified) LiquidTheme.accentColor else color
+    val transition = rememberInfiniteTransition(label = "liquid_spinner")
+    val rotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing)),
+        label = "spin"
+    )
+    val pulse by transition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse"
+    )
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .liquidGlass(shape = CircleShape, elevation = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(size * 0.14f)) {
+            val sw = this.size.minDimension * 0.09f
+            val arcSize = Size(this.size.width - sw, this.size.height - sw)
+            val topLeft = Offset(sw / 2f, sw / 2f)
+            drawCircle(
+                color = Color.White.copy(alpha = 0.15f),
+                radius = (this.size.minDimension - sw) / 2f,
+                style = Stroke(width = sw)
+            )
+            rotate(rotation) {
+                drawArc(
+                    color = tint,
+                    startAngle = 0f,
+                    sweepAngle = 100f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = sw, cap = StrokeCap.Round)
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .size(size * 0.22f)
+                .graphicsLayer { scaleX = pulse; scaleY = pulse; alpha = pulse }
+                .background(tint, CircleShape)
+        )
+    }
+}
+
+/** [۸] سایدبار شیشه‌ای — آیتم فعال با پس‌زمینه‌ی سفید ۱۰٪ و انتقال نرم ۴۰۰ms. */
+data class LiquidSidebarItem(val title: String, val icon: ImageVector)
+
+@Composable
+fun LiquidGlassSidebar(
+    title: String,
+    items: List<LiquidSidebarItem>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .liquidGlass(shape = RoundedCornerShape(20.dp))
+            .padding(vertical = 12.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = LiquidTheme.textPrimary,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
+        items.forEachIndexed { index, item ->
+            val selected = index == selectedIndex
+            val bg by animateColorAsState(
+                targetValue = if (selected) Color.White.copy(alpha = if (LiquidTheme.isDark) 0.10f else 0.7f) else Color.Transparent,
+                animationSpec = tween(400),
+                label = "sidebar_item_bg"
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(bg)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple()
+                    ) { onSelect(index) }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    item.icon,
+                    contentDescription = null,
+                    tint = if (selected) LiquidTheme.accentColor else LiquidTheme.textSecondary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) LiquidTheme.textPrimary else LiquidTheme.textSecondary
+                )
+            }
+        }
+    }
+}
+
+/** [۵] آیکون شیشه‌ای ۶۴dp با گوشه‌ی ۱۶dp — معادل glass-icon. اگر onClick داده شود، فشردن اسپرینگی دارد. */
+@Composable
+fun LiquidGlassIcon(
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    size: Dp = 64.dp,
+    tint: Color = Color.Unspecified,
+    contentDescription: String? = null,
+    onClick: (() -> Unit)? = null
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .liquidTapEffect(enabled = onClick != null) { onClick?.invoke() }
+            .liquidGlass(shape = RoundedCornerShape(size * 0.25f), elevation = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (tint == Color.Unspecified) LiquidTheme.accentColor else tint,
+            modifier = Modifier.size(size * 0.45f)
+        )
+    }
 }
