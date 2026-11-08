@@ -14,10 +14,14 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.annotation.RawRes
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
+import com.example.data.local.UserPreferences
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 /**
  * هر نوع هشدار یک صدای کوتاه (کمتر از ~۱ ثانیه)، الگوی لرزش و کانال مخصوص خودش را دارد.
@@ -31,7 +35,7 @@ enum class AlertType(
     val isAlarmUsage: Boolean
 ) {
     WORKOUT(
-        channelId = "gym_alert_workout_v2",
+        channelId = "gym_alert_workout_v3",
         channelName = "یادآور تمرین",
         channelDescription = "یادآوری روزانه‌ی زمان تمرین",
         soundRes = R.raw.alert_workout,
@@ -39,7 +43,7 @@ enum class AlertType(
         isAlarmUsage = false
     ),
     WATER(
-        channelId = "gym_alert_water_v2",
+        channelId = "gym_alert_water_v3",
         channelName = "یادآور نوشیدن آب",
         channelDescription = "یادآوری نوشیدن آب",
         soundRes = R.raw.alert_water,
@@ -47,7 +51,7 @@ enum class AlertType(
         isAlarmUsage = false
     ),
     SUPPLEMENT(
-        channelId = "gym_alert_supplement_v2",
+        channelId = "gym_alert_supplement_v3",
         channelName = "یادآور مکمل‌ها",
         channelDescription = "یادآوری مصرف مکمل‌ها",
         soundRes = R.raw.alert_supplement,
@@ -55,7 +59,7 @@ enum class AlertType(
         isAlarmUsage = false
     ),
     REST_END(
-        channelId = "gym_alert_rest_end_v2",
+        channelId = "gym_alert_rest_end_v3",
         channelName = "پایان استراحت بین ست‌ها",
         channelDescription = "اعلان پایان زمان استراحت بین ست‌ها",
         soundRes = R.raw.alert_rest_end,
@@ -63,7 +67,7 @@ enum class AlertType(
         isAlarmUsage = true
     ),
     EXERCISE_END(
-        channelId = "gym_alert_exercise_end_v2",
+        channelId = "gym_alert_exercise_end_v3",
         channelName = "پایان حرکت زمان‌دار",
         channelDescription = "اعلان پایان تایمر حرکت (مثل پلانک)",
         soundRes = R.raw.alert_exercise_end,
@@ -87,7 +91,11 @@ object NotificationHelper {
     val CHANNEL_EXERCISE_END = AlertType.EXERCISE_END.channelId
     val CHANNEL_REMINDERS = AlertType.WORKOUT.channelId
 
-    private val LEGACY_CHANNELS = listOf("channel_gym_reminders", "channel_gym_rest_timer")
+    private val LEGACY_CHANNELS = listOf(
+        "channel_gym_reminders", "channel_gym_rest_timer",
+        "gym_alert_workout_v2", "gym_alert_water_v2", "gym_alert_supplement_v2",
+        "gym_alert_rest_end_v2", "gym_alert_exercise_end_v2"
+    )
 
     private fun soundUri(context: Context, type: AlertType): Uri =
         Uri.parse("android.resource://${context.packageName}/${type.soundRes}")
@@ -112,9 +120,9 @@ object NotificationHelper {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = type.channelDescription
-                enableVibration(true)
-                vibrationPattern = type.vibration
-                setSound(soundUri(context, type), audioAttributes(type))
+                // صدا و لرزش را خود برنامه پخش می‌کند تا ولوم تنظیم‌شده در برنامه اعمال شود
+                enableVibration(false)
+                setSound(null, null)
             }
             nm.createNotificationChannel(channel)
         }
@@ -131,13 +139,75 @@ object NotificationHelper {
         }
     }
 
-    /** پخش صدای کوتاه اختصاصی همان هشدار + لرزش (برای وقتی که برنامه باز است). */
-    fun playAlarmSoundAndVibrate(context: Context, type: AlertType = AlertType.REST_END) {
+    private fun accentColorInt(context: Context): Int = try {
+        val st = runBlocking { UserPreferences(context.applicationContext).userSettingsFlow.first() }
+        com.example.ui.theme.LiquidPalettes.fromId(st.accentPalette).nightAccent.toArgb()
+    } catch (_: Exception) {
+        0xFFD90D3C.toInt()
+    }
+
+    /** ولوم و وضعیت صدا را از تنظیمات برنامه می‌خواند (همگام؛ DataStore کوچک است). */
+    private fun volumeFor(context: Context, type: AlertType): Float? {
+        val settings = try {
+            runBlocking { UserPreferences(context.applicationContext).userSettingsFlow.first() }
+        } catch (_: Exception) {
+            null
+        }
+        val enabled = settings?.inAppSoundsEnabled ?: true
+        val raw = when (type) {
+            AlertType.REST_END -> settings?.restTimerVolume ?: 0.8f
+            AlertType.EXERCISE_END -> settings?.timedAlarmVolume ?: 0.9f
+            else -> settings?.reminderVolume ?: 0.8f
+        }
+        val isInApp = type == AlertType.REST_END || type == AlertType.EXERCISE_END
+        if (isInApp && !enabled) return null
+        val v = raw.coerceIn(0f, 1f)
+        return v * v // منحنی ادراکی: اسلایدر پایین‌تر واقعاً آرام‌تر می‌شود
+    }
+
+    /** پخش صدای کوتاه اختصاصی همان هشدار با ولوم تنظیم‌شده + لرزش. */
+    fun playAlarmSoundAndVibrate(
+        context: Context,
+        type: AlertType = AlertType.REST_END,
+        volumeOverride: Float? = null,
+        onDone: (() -> Unit)? = null
+    ) {
+        val volume = volumeOverride ?: volumeFor(context, type)
+        var started = false
+        if (volume != null && volume > 0f) {
+            try {
+                val afd = context.resources.openRawResourceFd(type.soundRes)
+                MediaPlayer().apply {
+                    setAudioAttributes(audioAttributes(type))
+                    setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    setVolume(volume, volume)
+                    setOnCompletionListener { it.release(); onDone?.invoke() }
+                    setOnErrorListener { mp, _, _ -> mp.release(); onDone?.invoke(); true }
+                    prepare()
+                    start()
+                }
+                afd.close()
+                started = true
+            } catch (_: Exception) {
+            }
+        }
+        if (!started) onDone?.invoke()
+        if (volume == null || volume > 0f) vibrate(context, type)
+    }
+
+    /** پخش نمونه برای وقتی کاربر اسلایدر ولوم را رها می‌کند. */
+    fun playPreview(context: Context, type: AlertType, rawVolume: Float) {
+        playAlarmSoundAndVibrateSilentVibration(context, type, rawVolume.coerceIn(0f, 1f).let { it * it })
+    }
+
+    private fun playAlarmSoundAndVibrateSilentVibration(context: Context, type: AlertType, volume: Float) {
+        if (volume <= 0f) return
         try {
             val afd = context.resources.openRawResourceFd(type.soundRes)
             MediaPlayer().apply {
                 setAudioAttributes(audioAttributes(type))
                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                setVolume(volume, volume)
                 setOnCompletionListener { it.release() }
                 setOnErrorListener { mp, _, _ -> mp.release(); true }
                 prepare()
@@ -146,7 +216,6 @@ object NotificationHelper {
             afd.close()
         } catch (_: Exception) {
         }
-        vibrate(context, type)
     }
 
     private fun vibrate(context: Context, type: AlertType) {
@@ -172,15 +241,17 @@ object NotificationHelper {
         channelId: String,
         title: String,
         message: String,
-        silent: Boolean = false
+        silent: Boolean = false,
+        onSoundDone: (() -> Unit)? = null
     ) {
         createNotificationChannels(context)
 
+        val type = AlertType.fromChannel(channelId)
+
         if (!hasNotificationPermission(context)) {
+            if (!silent) playAlarmSoundAndVibrate(context, type, onDone = onSoundDone) else onSoundDone?.invoke()
             return
         }
-
-        val type = AlertType.fromChannel(channelId)
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -195,7 +266,7 @@ object NotificationHelper {
 
         val builder = NotificationCompat.Builder(context, type.channelId)
             .setSmallIcon(R.drawable.ic_notification)
-            .setColor(0xFFD90D3C.toInt())
+            .setColor(accentColorInt(context))
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
@@ -204,15 +275,12 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
-        if (silent) {
-            builder.setSilent(true)
-        } else {
-            // برای اندروید ۷ و پایین‌تر (کانال ندارند)
-            builder.setSound(soundUri(context, type))
-            builder.setVibrate(type.vibration)
-        }
+        // صدا/لرزش همیشه توسط خود برنامه (با ولوم کاربر) پخش می‌شود
+        builder.setSilent(true)
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(notificationId, builder.build())
+
+        if (!silent) playAlarmSoundAndVibrate(context, type, onDone = onSoundDone) else onSoundDone?.invoke()
     }
 }
