@@ -5,12 +5,14 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -70,11 +72,11 @@ class MainActivity : ComponentActivity() {
             val isRestTimerActive by activeWorkoutViewModel.isRestTimerActive.collectAsStateWithLifecycle()
             val restRemainingSeconds by activeWorkoutViewModel.restSecondsRemaining.collectAsStateWithLifecycle()
 
-            var currentScreen by remember { mutableStateOf<String>(Screen.Dashboard.route) }
+            var currentScreen by rememberSaveable { mutableStateOf<String>(Screen.Dashboard.route) }
             var planBeingEdited by remember { mutableStateOf<WorkoutPlan?>(null) }
             var planExercisesBeingEdited by remember { mutableStateOf<List<WorkoutExercise>>(emptyList()) }
             var isEditingPlan by remember { mutableStateOf(false) }
-            var isShowingOnboarding by remember { mutableStateOf(false) }
+            var isShowingOnboarding by rememberSaveable { mutableStateOf(false) }
 
             val coroutineScope = rememberCoroutineScope()
             val context = LocalContext.current
@@ -91,6 +93,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // اگر مسیر ذخیره‌شده معتبر نباشد (مثلاً بعد از بسته شدن پروسه) به پیشخوان برمی‌گردیم
+            val screenRoute = if (Screen.bottomNavItems.any { it.route == currentScreen }) {
+                currentScreen
+            } else {
+                Screen.Dashboard.route
+            }
+
             // Check if onboarding needs to be shown initially
             val showOnboardingFirstTime = !userSettings.onboardingCompleted && !isShowingOnboarding
 
@@ -101,6 +110,9 @@ class MainActivity : ComponentActivity() {
                 // Strictly enforce RTL for Persian language
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     if (showOnboardingFirstTime || isShowingOnboarding) {
+                        BackHandler(enabled = isShowingOnboarding) {
+                            isShowingOnboarding = false
+                        }
                         OnboardingScreen(
                             currentSettings = userSettings,
                             onSaveAndContinue = { name, photo, gender, age, height, weight, activity, goal, meals, water, unit ->
@@ -150,6 +162,7 @@ class MainActivity : ComponentActivity() {
                     } else if (isWorkoutActive && currentScreen == "active_workout") {
                         ActiveWorkoutScreen(
                             viewModel = activeWorkoutViewModel,
+                            weightUnit = userSettings.weightUnit,
                             onTemporaryExit = {
                                 currentScreen = Screen.Dashboard.route
                             },
@@ -159,8 +172,14 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     } else {
+                        // دکمه برگشت: از هر تب به پیشخوان، و از پیشخوان خروج از برنامه
+                        BackHandler(enabled = screenRoute != Screen.Dashboard.route) {
+                            currentScreen = Screen.Dashboard.route
+                        }
                         Scaffold(
                             containerColor = LiquidTheme.backgroundNeutral,
+                            // هر صفحه نوار بالای خودش را با پدینگ status bar دارد؛ پدینگ دوبل نشود
+                            contentWindowInsets = WindowInsets(0, 0, 0, 0),
                             bottomBar = {
                                 Column(
                                     modifier = Modifier.fillMaxWidth()
@@ -180,7 +199,7 @@ class MainActivity : ComponentActivity() {
 
                                     // Floating Liquid Glass Navigation Bar
                                     LiquidBottomBar(
-                                        currentRoute = currentScreen,
+                                        currentRoute = screenRoute,
                                         onNavigate = { currentScreen = it }
                                     )
                                 }
@@ -191,7 +210,12 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .padding(innerPadding)
                             ) {
-                                when (currentScreen) {
+                                Crossfade(
+                                    targetState = screenRoute,
+                                    animationSpec = tween(durationMillis = 180),
+                                    label = "tab_crossfade"
+                                ) { route ->
+                                when (route) {
                                     Screen.Dashboard.route -> {
                                         val todayGregorian = remember { JalaliCalendar.getTodayGregorian() }
                                         val todayHistories = allHistories.filter { it.date == todayGregorian }
@@ -350,6 +374,7 @@ class MainActivity : ComponentActivity() {
                                             // onUpdateProfilePhoto = { photo -> gymViewModel.updateProfilePhoto(photo) } // موقتا کامنت شد چون تابعش وجود نداره
                                         )
                                     }
+                                }
                                 }
                             }
                         }
