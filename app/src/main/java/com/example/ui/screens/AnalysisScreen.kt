@@ -1,6 +1,10 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -54,7 +58,7 @@ fun AnalysisScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("analysis_screen"),
-        contentPadding = PaddingValues(bottom = 110.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 1. Inline Top Bar
@@ -466,7 +470,7 @@ fun AnalysisScreen(
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                         LiquidChartCard(
                             title = "روند وزن",
-                            unit = "kg",
+                            unit = userSettings.weightUnit,
                             values = weightPoints,
                             lineColor = LiquidTheme.accentColor,
                             emptyMessage = "حداقل ۲ بار ثبت وزن برای رسم نمودار نیاز است"
@@ -497,7 +501,7 @@ fun AnalysisScreen(
                 item {
                     var selectedYIndex by remember { mutableIntStateOf(0) }
                     val yLabels = listOf("وزن", "دور کمر", "دور بازو", "دور سینه")
-                    val yUnits = listOf("kg", "cm", "cm", "cm")
+                    val yUnits = listOf(userSettings.weightUnit, "cm", "cm", "cm")
                     val customPoints = allMeasurements.reversed().mapNotNull { m ->
                         when (selectedYIndex) {
                             1 -> m.waistCm
@@ -688,17 +692,32 @@ fun LiquidLineChart(
     gridColor: Color,
     modifier: Modifier = Modifier
 ) {
+    // در صفحه RTL، زمان از راست به چپ جلو می‌رود (جدیدترین مقدار سمت چپ)
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val labelColor = LiquidTheme.textSecondary
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = labelColor)
+
     Canvas(modifier = modifier) {
         if (values.size < 2) return@Canvas
 
-        val minVal = values.minOrNull() ?: 0.0
-        val maxVal = values.maxOrNull() ?: 1.0
+        val dataMin = values.minOrNull() ?: 0.0
+        val dataMax = values.maxOrNull() ?: 1.0
+        // حداقل بازه نمایش: نوسان‌های خیلی کوچک (مثلاً ۰٫۲ کیلو) بزرگ‌نمایی نشود
+        val minSpan = maxOf(kotlin.math.abs(dataMax) * 0.06, 0.5)
+        val span = maxOf(dataMax - dataMin, minSpan)
+        val center = (dataMax + dataMin) / 2.0
+        val minVal = center - span / 2.0 - span * 0.08
+        val maxVal = center + span / 2.0 + span * 0.08
         val range = (maxVal - minVal).coerceAtLeast(0.0001)
+
         val padY = 12.dp.toPx()
         val chartH = size.height - padY * 2
         val stepX = size.width / (values.size - 1)
 
-        // Light horizontal guide lines
+        fun xAt(index: Int): Float = if (isRtl) size.width - index * stepX else index * stepX
+
+        // خطوط راهنما + برچسب عددی محور Y (بالا، وسط، پایین)
         for (i in 0..2) {
             val gy = padY + chartH * i / 2f
             drawLine(
@@ -707,13 +726,22 @@ fun LiquidLineChart(
                 end = Offset(size.width, gy),
                 strokeWidth = 1.dp.toPx()
             )
+            val labelValue = maxVal - (maxVal - minVal) * i / 2.0
+            val layout = textMeasurer.measure(
+                text = PersianNumberHelper.formatDecimal(labelValue),
+                style = labelStyle
+            )
+            val lx = if (isRtl) size.width - layout.size.width else 0f
+            drawText(
+                textLayoutResult = layout,
+                topLeft = Offset(lx, (gy - layout.size.height - 2.dp.toPx()).coerceAtLeast(0f))
+            )
         }
 
         val linePath = Path()
         val points = values.mapIndexed { index, v ->
-            val x = index * stepX
             val y = padY + chartH - (((v - minVal) / range) * chartH).toFloat()
-            Offset(x, y)
+            Offset(xAt(index), y)
         }
         points.forEachIndexed { index, pt ->
             if (index == 0) linePath.moveTo(pt.x, pt.y) else linePath.lineTo(pt.x, pt.y)
@@ -721,8 +749,8 @@ fun LiquidLineChart(
 
         val fillPath = Path().apply {
             addPath(linePath)
-            lineTo(size.width, size.height)
-            lineTo(0f, size.height)
+            lineTo(points.last().x, size.height)
+            lineTo(points.first().x, size.height)
             close()
         }
         drawPath(

@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.*
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,7 +13,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -38,8 +39,8 @@ fun PlanEditorScreen(
     onSave: (WorkoutPlan, List<WorkoutExercise>) -> Unit,
     onBack: () -> Unit
 ) {
-    var name by remember { mutableStateOf(initialPlan?.name ?: "") }
-    var notes by remember { mutableStateOf(initialPlan?.notes ?: "") }
+    var name by rememberSaveable { mutableStateOf(initialPlan?.name ?: "") }
+    var notes by rememberSaveable { mutableStateOf(initialPlan?.notes ?: "") }
     val initialDays = remember {
         initialPlan?.scheduledDay?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
     }
@@ -55,6 +56,30 @@ fun PlanEditorScreen(
 
     val weekDays = JalaliCalendar.WEEKDAY_NAMES
 
+    // خروج بدون ذخیره: اگر چیزی تغییر کرده باشد قبل از خروج تأیید گرفته می‌شود
+    var showDiscardDialog by remember { mutableStateOf(false) }
+    val hasUnsavedChanges = name != (initialPlan?.name ?: "") ||
+        notes != (initialPlan?.notes ?: "") ||
+        selectedDays != initialDays ||
+        (initialExercises.isNotEmpty() && exercises != initialExercises) ||
+        (initialExercises.isEmpty() && exercises.any { it.name.isNotBlank() })
+    val requestBack: () -> Unit = {
+        if (hasUnsavedChanges) showDiscardDialog = true else onBack()
+    }
+    BackHandler(onBack = requestBack)
+
+    if (showDiscardDialog) {
+        LiquidAlertDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = "خروج بدون ذخیره؟",
+            message = "تغییرات این برنامه ذخیره نشده و از بین می‌رود.",
+            confirmText = "خروج",
+            dismissText = "ادامه ویرایش",
+            isDestructive = true,
+            onConfirm = onBack
+        )
+    }
+
     Scaffold(
         containerColor = LiquidTheme.backgroundNeutral,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -63,9 +88,9 @@ fun PlanEditorScreen(
                 title = if (initialPlan == null) "برنامه جدید" else "ویرایش برنامه",
                 navigationIcon = {
                     LiquidCircleButton(
-                        icon = Icons.AutoMirrored.Filled.ArrowForward,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "بازگشت",
-                        onClick = onBack
+                        onClick = requestBack
                     )
                 },
                 actions = {
@@ -155,7 +180,7 @@ fun PlanEditorScreen(
                                             text = day,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) Color.White else LiquidTheme.textPrimary
+                                            color = if (isSelected) LiquidTheme.onAccent else LiquidTheme.textPrimary
                                         )
                                     }
                                 }
@@ -183,7 +208,7 @@ fun PlanEditorScreen(
                                             text = day,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) Color.White else LiquidTheme.textPrimary
+                                            color = if (isSelected) LiquidTheme.onAccent else LiquidTheme.textPrimary
                                         )
                                     }
                                 }
@@ -468,7 +493,7 @@ fun PlanEditorScreen(
                                                 Surface(
                                                     modifier = Modifier
                                                         .weight(1f)
-                                                        .height(32.dp)
+                                                        .height(40.dp)
                                                         .liquidTapEffect {
                                                             exercises = exercises.mapIndexed { i, ex ->
                                                                 if (i == index) ex.copy(reps = sec) else ex
@@ -482,7 +507,7 @@ fun PlanEditorScreen(
                                                             text = "${PersianNumberHelper.toPersianDigits(sec)}ث",
                                                             style = MaterialTheme.typography.labelSmall,
                                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                            color = if (isSelected) Color.White else LiquidTheme.textPrimary
+                                                            color = if (isSelected) LiquidTheme.onAccent else LiquidTheme.textPrimary
                                                         )
                                                     }
                                                 }
@@ -637,7 +662,7 @@ fun PlanEditorScreen(
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(30.dp)
+                                        .height(40.dp)
                                         .liquidTapEffect { selectedMuscleGroup = muscle },
                                     shape = RoundedCornerShape(8.dp),
                                     color = if (isSelected) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
@@ -647,7 +672,7 @@ fun PlanEditorScreen(
                                             text = muscle,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) Color.White else LiquidTheme.textPrimary
+                                            color = if (isSelected) LiquidTheme.onAccent else LiquidTheme.textPrimary
                                         )
                                     }
                                 }

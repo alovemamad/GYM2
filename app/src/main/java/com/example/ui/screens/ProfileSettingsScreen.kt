@@ -42,6 +42,7 @@ import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.util.BackupHelper
 import com.example.util.ImageStorageHelper
+import com.example.util.AlertType
 import com.example.util.NotificationHelper
 import com.example.util.PersianNumberHelper
 import kotlinx.coroutines.launch
@@ -152,7 +153,7 @@ fun ProfileSettingsScreen(
                         title = "شخصی‌سازی ظاهر",
                         navigationIcon = {
                             LiquidCircleButton(
-                                icon = Icons.AutoMirrored.Filled.ArrowForward,
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "بازگشت",
                                 onClick = { currentSubScreen = null }
                             )
@@ -250,7 +251,7 @@ fun ProfileSettingsScreen(
                         title = "تنظیم یادآورها",
                         navigationIcon = {
                             LiquidCircleButton(
-                                icon = Icons.AutoMirrored.Filled.ArrowForward,
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "بازگشت",
                                 onClick = { currentSubScreen = null }
                             )
@@ -383,7 +384,9 @@ fun ProfileSettingsScreen(
                                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
                                 onTestNotification()
-                                NotificationHelper.playAlarmSoundAndVibrate(context)
+                                if (!hasNotifPermission) {
+                                    NotificationHelper.playAlarmSoundAndVibrate(context, AlertType.WORKOUT)
+                                }
                                 Toast.makeText(context, "اعلان و زنگ تست با موفقیت ارسال شد!", Toast.LENGTH_SHORT).show()
                             }
                         )
@@ -417,7 +420,7 @@ fun ProfileSettingsScreen(
                         .fillMaxSize()
                         .padding(padding)
                         .testTag("profile_screen"),
-                    contentPadding = PaddingValues(bottom = 110.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Profile Header Card
@@ -468,7 +471,7 @@ fun ProfileSettingsScreen(
                                             Icon(
                                                 imageVector = Icons.Filled.CameraAlt,
                                                 contentDescription = "تغییر عکس",
-                                                tint = Color.White,
+                                                tint = LiquidTheme.onAccent,
                                                 modifier = Modifier.size(12.dp)
                                             )
                                         }
@@ -495,7 +498,7 @@ fun ProfileSettingsScreen(
                                     }
 
                                     Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                         contentDescription = null,
                                         tint = LiquidTheme.textSecondary,
                                         modifier = Modifier.size(20.dp)
@@ -581,7 +584,7 @@ fun ProfileSettingsScreen(
                                     )
 
                                     GroupedRow(
-                                        title = "درباره GYM PRO",
+                                        title = "درباره GYM",
                                         subtitle = "انگیزشی • ارتباط با توسعه‌دهنده",
                                         icon = Icons.Filled.Info,
                                         iconTint = SemanticIconCyan,
@@ -632,7 +635,7 @@ fun ProfileSettingsScreen(
                 try {
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, "پشتیبان GYM PRO")
+                        putExtra(Intent.EXTRA_SUBJECT, "پشتیبان GYM")
                         putExtra(Intent.EXTRA_TEXT, file.readText())
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "اشتراک‌گذاری فایل پشتیبان"))
@@ -772,7 +775,7 @@ fun ProfileSettingsScreen(
     if (showAboutDialog) {
         LiquidAlertDialog(
             onDismissRequest = { showAboutDialog = false },
-            title = "درباره GYM PRO",
+            title = "درباره GYM",
             message = "«بدن شما تنها خانه‌ای است که تا پایان عمر در آن زندگی می‌کنید. هر قطره عرق، هر ست سنگین و هر ثانیه‌ای که تسلیم نشدید، ساختن نسخه‌ای قوی‌تر، شجاع‌تر و متعهدتر از خودِ شماست. درد تمرین موقتی است، اما افتخار ساختن قهرمان درونتان تا ابد باقی می‌ماند!»",
             confirmText = "بستن",
             onConfirm = {},
@@ -801,7 +804,7 @@ fun ProfileSettingsScreen(
                                 }
                             },
                         shape = RoundedCornerShape(14.dp),
-                        color = Color(0xFF29B6F6).copy(alpha = 0.14f)
+                        color = BrandTelegram.copy(alpha = 0.14f)
                     ) {
                         Row(
                             modifier = Modifier
@@ -820,7 +823,7 @@ fun ProfileSettingsScreen(
                                 Text("تلگرام: @momo1f", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.textPrimary)
                                 Text("مشاهده کانال و ارتباط مستقیم", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
                             }
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = LiquidTheme.textSecondary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = LiquidTheme.textSecondary, modifier = Modifier.size(16.dp))
                         }
                     }
 
@@ -837,7 +840,7 @@ fun ProfileSettingsScreen(
                                 }
                             },
                         shape = RoundedCornerShape(14.dp),
-                        color = Color(0xFFE1306C).copy(alpha = 0.14f)
+                        color = BrandInstagram.copy(alpha = 0.14f)
                     ) {
                         Row(
                             modifier = Modifier
@@ -856,7 +859,7 @@ fun ProfileSettingsScreen(
                                 Text("اینستاگرام: @die3man", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.textPrimary)
                                 Text("مشاهده صفحه و محتوای انگیزشی", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
                             }
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = LiquidTheme.textSecondary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = LiquidTheme.textSecondary, modifier = Modifier.size(16.dp))
                         }
                     }
                 }

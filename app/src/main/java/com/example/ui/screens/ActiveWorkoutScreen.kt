@@ -34,7 +34,8 @@ import com.example.util.PersianNumberHelper
 fun ActiveWorkoutScreen(
     viewModel: ActiveWorkoutViewModel,
     onTemporaryExit: () -> Unit,
-    onWorkoutFinished: () -> Unit
+    onWorkoutFinished: () -> Unit,
+    weightUnit: String = "kg"
 ) {
     val planName by viewModel.currentPlanName.collectAsState()
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
@@ -299,7 +300,7 @@ fun ActiveWorkoutScreen(
                                 Text("مدت زمان", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                                 Text("تایمر معکوس", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                             } else {
-                                Text("وزنه (kg)", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                                Text("وزنه ($weightUnit)", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                                 Text("تکرار", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                             }
                             Text("ثبت ست", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary, modifier = Modifier.width(56.dp), textAlign = TextAlign.Center)
@@ -348,7 +349,7 @@ fun ActiveWorkoutScreen(
                                                 Box(
                                                     modifier = Modifier
                                                         .weight(1f)
-                                                        .height(38.dp)
+                                                        .height(44.dp)
                                                         .clip(RoundedCornerShape(10.dp))
                                                         .background(LiquidTheme.surfaceSolid),
                                                     contentAlignment = Alignment.Center
@@ -356,8 +357,12 @@ fun ActiveWorkoutScreen(
                                                     BasicTextField(
                                                         value = metricVal,
                                                         onValueChange = { newVal ->
-                                                            viewModel.updateCustomMetricValue(exIndex, setIndex, metricKey, newVal)
+                                                            viewModel.updateCustomMetricValue(
+                                                                exIndex, setIndex, metricKey,
+                                                                PersianNumberHelper.toEnglishDigits(newVal).replace('٫', '.')
+                                                            )
                                                         },
+                                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                                         textStyle = MaterialTheme.typography.bodyMedium.copy(
                                                             textAlign = TextAlign.Center,
                                                             fontWeight = FontWeight.Bold,
@@ -392,7 +397,7 @@ fun ActiveWorkoutScreen(
                                     ) {
                                         Surface(
                                             modifier = Modifier
-                                                .height(38.dp)
+                                                .height(44.dp)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .liquidTapEffect {
                                                     viewModel.toggleExerciseTimer(exIndex, setIndex)
@@ -407,14 +412,14 @@ fun ActiveWorkoutScreen(
                                                 Icon(
                                                     imageVector = if (setLog.isTimerActive) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                                     contentDescription = "شروع تایمر",
-                                                    tint = if (setLog.isTimerActive) Color.White else LiquidTheme.accentColor,
+                                                    tint = if (setLog.isTimerActive) onColorFor(SemanticIconOrange) else LiquidTheme.accentColor,
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                                 Text(
                                                     text = if (setLog.isTimerActive) "توقف" else "شروع",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = if (setLog.isTimerActive) Color.White else LiquidTheme.accentColor
+                                                    color = if (setLog.isTimerActive) onColorFor(SemanticIconOrange) else LiquidTheme.accentColor
                                                 )
                                             }
                                         }
@@ -425,15 +430,26 @@ fun ActiveWorkoutScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .padding(horizontal = 6.dp)
-                                            .height(40.dp)
+                                            .height(44.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(LiquidTheme.surfaceSolid),
                                         contentAlignment = Alignment.Center
                                     ) {
+                                        // متن محلی تا تایپ اعشار (مثل «۲۲.») قطع نشود
+                                        var weightText by remember(exIndex, setIndex, setLog.weight) {
+                                            mutableStateOf(
+                                                if (setLog.weight == 0.0) ""
+                                                else if (setLog.weight % 1.0 == 0.0) setLog.weight.toLong().toString()
+                                                else setLog.weight.toString()
+                                            )
+                                        }
                                         BasicTextField(
-                                            value = if (setLog.weight == 0.0) "" else setLog.weight.toString(),
+                                            value = weightText,
                                             onValueChange = { str ->
-                                                val w = str.toDoubleOrNull() ?: 0.0
+                                                val clean = PersianNumberHelper.toEnglishDigits(str)
+                                                    .replace('٫', '.').replace(',', '.')
+                                                weightText = clean
+                                                val w = clean.toDoubleOrNull() ?: 0.0
                                                 viewModel.updateSetValues(exIndex, setIndex, weight = w, reps = setLog.reps)
                                             },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -452,7 +468,7 @@ fun ActiveWorkoutScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .padding(horizontal = 6.dp)
-                                            .height(40.dp)
+                                            .height(44.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(LiquidTheme.surfaceSolid),
                                         contentAlignment = Alignment.Center
@@ -460,7 +476,7 @@ fun ActiveWorkoutScreen(
                                         BasicTextField(
                                             value = if (setLog.reps == 0) "" else setLog.reps.toString(),
                                             onValueChange = { str ->
-                                                val r = str.toIntOrNull() ?: 0
+                                                val r = PersianNumberHelper.toEnglishDigits(str).toIntOrNull() ?: 0
                                                 viewModel.updateSetValues(exIndex, setIndex, weight = setLog.weight, reps = r)
                                             },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -598,7 +614,7 @@ fun ActiveWorkoutScreen(
                             Surface(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(38.dp)
+                                    .height(44.dp)
                                     .liquidTapEffect { selectedDefaultRest = sec },
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isSel) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
@@ -608,7 +624,7 @@ fun ActiveWorkoutScreen(
                                         text = "${PersianNumberHelper.toPersianDigits(sec)}ث",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSel) Color.White else LiquidTheme.textPrimary
+                                        color = if (isSel) LiquidTheme.onAccent else LiquidTheme.textPrimary
                                     )
                                 }
                             }

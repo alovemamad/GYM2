@@ -77,13 +77,13 @@ fun DashboardScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("dashboard_screen"),
-        contentPadding = PaddingValues(bottom = 110.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. Inline Liquid Top Bar with Profile Button & Logo
         item {
             LiquidTopBar(
-                title = "GYM PRO",
+                title = "GYM",
                 navigationIcon = {
                     Box(
                         modifier = Modifier

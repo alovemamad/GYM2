@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -29,6 +30,7 @@ import com.example.data.local.UserSettings
 import com.example.ui.components.*
 import com.example.ui.theme.LiquidTheme
 import com.example.util.ImageStorageHelper
+import com.example.util.PersianNumberHelper
 
 @Composable
 fun OnboardingScreen(
@@ -37,17 +39,20 @@ fun OnboardingScreen(
     onSkip: () -> Unit,
     onRestoreBackupClick: () -> Unit
 ) {
-    var name by remember { mutableStateOf(currentSettings.userName) }
-    var photoUri by remember { mutableStateOf(currentSettings.profilePhotoUri) }
-    var gender by remember { mutableStateOf(currentSettings.gender.ifBlank { "MALE" }) }
-    var ageText by remember { mutableStateOf(currentSettings.age?.toString() ?: "") }
-    var heightText by remember { mutableStateOf(currentSettings.heightCm?.toString() ?: "") }
-    var weightText by remember { mutableStateOf(currentSettings.weightKg?.toString() ?: "") }
-    var activityLevel by remember { mutableStateOf(currentSettings.activityLevel) }
-    var fitnessGoal by remember { mutableStateOf(currentSettings.fitnessGoal) }
-    var mealsCount by remember { mutableStateOf(currentSettings.mealsCount) }
-    var waterGoalText by remember { mutableStateOf(currentSettings.waterGoalMl.toString()) }
-    var weightUnit by remember { mutableStateOf(currentSettings.weightUnit) }
+    var name by rememberSaveable { mutableStateOf(currentSettings.userName) }
+    var photoUri by rememberSaveable { mutableStateOf(currentSettings.profilePhotoUri) }
+    var gender by rememberSaveable { mutableStateOf(currentSettings.gender.ifBlank { "MALE" }) }
+    var ageText by rememberSaveable { mutableStateOf(currentSettings.age?.toString() ?: "") }
+    var heightText by rememberSaveable { mutableStateOf(currentSettings.heightCm?.toString() ?: "") }
+    var weightText by rememberSaveable { mutableStateOf(currentSettings.weightKg?.toString() ?: "") }
+    var activityLevel by rememberSaveable { mutableStateOf(currentSettings.activityLevel) }
+    var fitnessGoal by rememberSaveable { mutableStateOf(currentSettings.fitnessGoal) }
+    var waterGoalText by rememberSaveable { mutableStateOf(currentSettings.waterGoalMl.toString()) }
+    var weightUnit by rememberSaveable { mutableStateOf(currentSettings.weightUnit) }
+    var mealsText by rememberSaveable { mutableStateOf(currentSettings.mealsCount.toString()) }
+    var step by rememberSaveable { mutableStateOf(0) }
+    val lastStep = 2
+    BackHandler(enabled = step > 0) { step -= 1 }
 
     val context = LocalContext.current
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -87,6 +92,32 @@ fun OnboardingScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // نشانگر مرحله
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (i in 0..lastStep) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(5.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (i <= step) LiquidTheme.accentColor
+                                else LiquidTheme.accentColor.copy(alpha = 0.18f)
+                            )
+                    )
+                }
+            }
+            Text(
+                text = "مرحله ${PersianNumberHelper.toPersianDigits(step + 1)} از ${PersianNumberHelper.toPersianDigits(lastStep + 1)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = LiquidTheme.textSecondary
+            )
+
+            if (step == 0) {
             // Hero Photo Section
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -216,6 +247,9 @@ fun OnboardingScreen(
                 }
             }
 
+            }
+
+            if (step == 1) {
             // Section 3: Goal
             LiquidSectionHeader(title = "هدف اصلی تمرینی")
             SolidGroupedCard {
@@ -317,6 +351,9 @@ fun OnboardingScreen(
                 }
             }
 
+            }
+
+            if (step == 2) {
             // Section 5: Hydration & Nutrition Targets
             LiquidSectionHeader(title = "اهداف تغذیه و آب")
             SolidGroupedCard {
@@ -338,8 +375,8 @@ fun OnboardingScreen(
                             modifier = Modifier.weight(1f)
                         )
                         LiquidInputField(
-                            value = mealsCount.toString(),
-                            onValueChange = { mealsCount = it.toIntOrNull() ?: 4 },
+                            value = mealsText,
+                            onValueChange = { mealsText = it },
                             label = "تعداد وعده‌ها",
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
@@ -348,15 +385,32 @@ fun OnboardingScreen(
                 }
             }
 
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
+            if (step < lastStep) {
+                LiquidPrimaryButton(
+                    text = "بعدی",
+                    onClick = { step += 1 },
+                    modifier = Modifier.testTag("onboarding_next_button")
+                )
+                if (step > 0) {
+                    LiquidSecondaryButton(
+                        text = "قبلی",
+                        onClick = { step -= 1 },
+                        modifier = Modifier.testTag("onboarding_back_button")
+                    )
+                }
+            } else {
             LiquidPrimaryButton(
                 text = "شروع و ذخیره اطلاعات",
                 onClick = {
-                    val age = ageText.toIntOrNull()
-                    val height = heightText.toDoubleOrNull()
-                    val weight = weightText.toDoubleOrNull()
-                    val water = waterGoalText.toIntOrNull() ?: 2500
+                    val age = PersianNumberHelper.toEnglishDigits(ageText).toIntOrNull()
+                    val height = PersianNumberHelper.toEnglishDigits(heightText).toDoubleOrNull()
+                    val weight = PersianNumberHelper.toEnglishDigits(weightText).toDoubleOrNull()
+                    val water = PersianNumberHelper.toEnglishDigits(waterGoalText).toIntOrNull() ?: 2500
+                    val meals = (PersianNumberHelper.toEnglishDigits(mealsText).toIntOrNull() ?: 4).coerceIn(1, 10)
                     onSaveAndContinue(
                         name,
                         photoUri,
@@ -366,7 +420,7 @@ fun OnboardingScreen(
                         weight,
                         activityLevel,
                         fitnessGoal,
-                        mealsCount,
+                        meals,
                         water,
                         weightUnit
                     )
@@ -380,6 +434,13 @@ fun OnboardingScreen(
                 onClick = onRestoreBackupClick,
                 modifier = Modifier.testTag("onboarding_restore_button")
             )
+
+            LiquidSecondaryButton(
+                text = "قبلی",
+                onClick = { step -= 1 },
+                modifier = Modifier.testTag("onboarding_back_button")
+            )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
         }

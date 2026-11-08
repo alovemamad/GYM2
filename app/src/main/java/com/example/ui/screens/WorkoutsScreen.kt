@@ -92,7 +92,7 @@ fun WorkoutsScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("workouts_screen"),
-        contentPadding = PaddingValues(bottom = 110.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 1. Inline Liquid Top Bar with 44dp Circular Glass Add Button
@@ -183,7 +183,7 @@ fun WorkoutsScreen(
                                                 onDuplicatePlan(plan.id)
                                                 Toast.makeText(context, "برنامه «${plan.name}» کپی شد.", Toast.LENGTH_SHORT).show()
                                             },
-                                            modifier = Modifier.size(36.dp)
+                                            modifier = Modifier.size(44.dp)
                                         ) {
                                             Icon(
                                                 Icons.Filled.ContentCopy,
@@ -280,7 +280,7 @@ fun WorkoutsScreen(
                                                 onDuplicatePlan(plan.id)
                                                 Toast.makeText(context, "برنامه «${plan.name}» کپی شد.", Toast.LENGTH_SHORT).show()
                                             },
-                                            modifier = Modifier.size(36.dp)
+                                            modifier = Modifier.size(44.dp)
                                         ) {
                                             Icon(
                                                 Icons.Filled.ContentCopy,

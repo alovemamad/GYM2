@@ -88,7 +88,7 @@ fun NutritionScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 110.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 1. Inline Liquid Top Bar
@@ -157,7 +157,7 @@ fun NutritionScreen(
                     )
                     Surface(
                         modifier = Modifier
-                            .height(34.dp)
+                            .height(44.dp)
                             .liquidTapEffect { showCalendarPickerDialog = true },
                         shape = RoundedCornerShape(10.dp),
                         color = LiquidTheme.surfaceElevated
@@ -207,7 +207,7 @@ fun NutritionScreen(
                                 text = PersianNumberHelper.toPersianDigits(jDate.day),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color.White else LiquidTheme.textPrimary
+                                color = if (isSelected) LiquidTheme.onAccent else LiquidTheme.textPrimary
                             )
                             if (hasLog && !isSelected) {
                                 Box(
@@ -405,7 +405,7 @@ fun NutritionScreen(
                                                     // Checkmark for taken today
                                                     Box(
                                                         modifier = Modifier
-                                                            .size(34.dp)
+                                                            .size(44.dp)
                                                             .clip(CircleShape)
                                                             .background(if (isTaken) SemanticSuccess else LiquidTheme.surfaceElevated)
                                                             .clickable {
@@ -659,7 +659,7 @@ fun NutritionScreen(
                             val isSel = pickedMonth == mNum
                             Surface(
                                 modifier = Modifier
-                                    .height(34.dp)
+                                    .height(44.dp)
                                     .liquidTapEffect {
                                         pickedMonth = mNum
                                         if (mNum > 6 && pickedDay > 30) pickedDay = 30
@@ -673,7 +673,7 @@ fun NutritionScreen(
                                         text = mName,
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSel) Color.White else LiquidTheme.textPrimary
+                                        color = if (isSel) LiquidTheme.onAccent else LiquidTheme.textPrimary
                                     )
                                 }
                             }
@@ -692,7 +692,7 @@ fun NutritionScreen(
                             val isSel = pickedDay == d
                             Surface(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(44.dp)
                                     .liquidTapEffect { pickedDay = d },
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isSel) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
@@ -702,7 +702,7 @@ fun NutritionScreen(
                                         text = PersianNumberHelper.toPersianDigits(d),
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSel) Color.White else LiquidTheme.textPrimary
+                                        color = if (isSel) LiquidTheme.onAccent else LiquidTheme.textPrimary
                                     )
                                 }
                             }
