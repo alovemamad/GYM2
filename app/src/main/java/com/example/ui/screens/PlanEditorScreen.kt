@@ -82,7 +82,7 @@ fun PlanEditorScreen(
     }
 
     Scaffold(
-        containerColor = LiquidTheme.backgroundNeutral,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             LiquidTopBar(

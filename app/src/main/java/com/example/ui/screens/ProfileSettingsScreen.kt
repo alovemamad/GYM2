@@ -147,7 +147,7 @@ fun ProfileSettingsScreen(
             // زیرصفحه تم و ظاهر
             // ==========================================
             Scaffold(
-                containerColor = LiquidTheme.backgroundNeutral,
+                containerColor = androidx.compose.ui.graphics.Color.Transparent,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
                     LiquidTopBar(
@@ -245,7 +245,7 @@ fun ProfileSettingsScreen(
             // زیرصفحه یادآورها و اعلان‌ها
             // ==========================================
             Scaffold(
-                containerColor = LiquidTheme.backgroundNeutral,
+                containerColor = androidx.compose.ui.graphics.Color.Transparent,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
                     LiquidTopBar(
@@ -556,7 +556,7 @@ fun ProfileSettingsScreen(
             // صفحه اصلی تنظیمات (Main Settings)
             // ==========================================
             Scaffold(
-                containerColor = LiquidTheme.backgroundNeutral,
+                containerColor = androidx.compose.ui.graphics.Color.Transparent,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
                     LiquidTopBar(

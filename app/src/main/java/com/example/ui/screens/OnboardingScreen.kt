@@ -65,7 +65,7 @@ fun OnboardingScreen(
     }
 
     Scaffold(
-        containerColor = LiquidTheme.backgroundNeutral,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             LiquidTopBar(
                 title = "راه‌اندازی اولیه",
