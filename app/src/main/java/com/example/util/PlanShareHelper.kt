@@ -263,7 +263,7 @@ object PlanShareHelper {
                 sb.append("   نکته: ${ex.notes}\n")
             }
         }
-        sb.append("\nاپلیکیشن GYM PRO")
+        sb.append("\nاپلیکیشن GYM")
         return sb.toString()
     }
 

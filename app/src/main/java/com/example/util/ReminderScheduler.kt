@@ -15,7 +15,14 @@ object ReminderScheduler {
     const val ID_SUPPLEMENT = 103
     const val ID_REST_TIMER = 104
 
-    fun scheduleDailyReminder(context: Context, reminderId: Int, timeStr: String, title: String, message: String) {
+    fun scheduleDailyReminder(
+        context: Context,
+        reminderId: Int,
+        timeStr: String,
+        title: String,
+        message: String,
+        channelId: String = NotificationHelper.CHANNEL_WORKOUT
+    ) {
         val parts = timeStr.split(":")
         if (parts.size != 2) return
 
@@ -37,7 +44,7 @@ object ReminderScheduler {
             putExtra(ReminderReceiver.EXTRA_ID, reminderId)
             putExtra(ReminderReceiver.EXTRA_TITLE, title)
             putExtra(ReminderReceiver.EXTRA_MESSAGE, message)
-            putExtra(ReminderReceiver.EXTRA_CHANNEL, NotificationHelper.CHANNEL_REMINDERS)
+            putExtra(ReminderReceiver.EXTRA_CHANNEL, channelId)
             putExtra(ReminderReceiver.EXTRA_IS_DAILY, true)
             putExtra(ReminderReceiver.EXTRA_TIME_STR, timeStr)
         }
@@ -56,7 +63,7 @@ object ReminderScheduler {
         val reminderId = 2000 + (supplementId % 1000).toInt()
         val title = "یادآور مصرف مکمل: $name"
         val message = "زمان مصرف دوز $dosage از مکمل $name فرا رسیده است."
-        scheduleDailyReminder(context, reminderId, timeStr, title, message)
+        scheduleDailyReminder(context, reminderId, timeStr, title, message, NotificationHelper.CHANNEL_SUPPLEMENT)
     }
 
     fun cancelSupplementItemReminder(context: Context, supplementId: Long) {
