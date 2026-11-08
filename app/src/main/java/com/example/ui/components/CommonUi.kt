@@ -116,10 +116,11 @@ fun Modifier.liquidGlass(
     shape: Shape = RoundedCornerShape(28.dp),
     tintAlpha: Float? = null,
     borderAlpha: Float = 0.25f,
-    elevation: Dp = 6.dp
+    elevation: Dp = 6.dp,
+    baseAlpha: Float? = null
 ): Modifier {
     val isDark = LiquidTheme.isDark
-    val baseAlpha = if (supportsBlur) 0.86f else 0.94f
+    val baseAlpha = baseAlpha ?: if (supportsBlur) 0.55f else 0.72f
     val baseBg = (if (isDark) GlassBaseDark else GlassBaseLight).copy(alpha = baseAlpha)
     val tint = Color.White.copy(alpha = tintAlpha ?: if (isDark) 0.08f else 0.65f)
     val tintBrush = Brush.verticalGradient(listOf(tint, tint.copy(alpha = tint.alpha * 0.55f)))
@@ -224,23 +225,13 @@ fun SolidGroupedCard(
     shape: Shape = RoundedCornerShape(24.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val isDark = LiquidTheme.isDark
-    val cardBg = if (isDark) DarkCard else LightCard
-    val shadowColor = if (isDark) Color.Black.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.04f)
-
-    Surface(
+    // نام تابع برای سازگاری با صفحه‌ها حفظ شده؛ ظاهر آن اکنون شیشه‌ای است
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(elevation = 2.dp, shape = shape, spotColor = shadowColor, ambientColor = shadowColor),
-        shape = shape,
-        color = cardBg,
-        tonalElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            content = content
-        )
-    }
+            .liquidGlass(shape = shape, elevation = 6.dp),
+        content = content
+    )
 }
 
 @Composable
@@ -284,7 +275,8 @@ fun GroupedRow(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(bg),
+                            .background(bg)
+                            .border(BorderStroke(1.dp, glassSpecularBrush(0.5f)), RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -419,9 +411,7 @@ fun GradientHeroCard(
                 .border(
                     BorderStroke(
                         1.dp,
-                        Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = 0.3f), Color.White.copy(alpha = 0.05f))
-                        )
+                        glassSpecularBrush(0.6f)
                     ),
                     shape = shape
                 )
@@ -741,7 +731,7 @@ fun LiquidBottomBar(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .height(72.dp)
-            .liquidGlass(shape = RoundedCornerShape(36.dp), elevation = 10.dp)
+            .liquidGlass(shape = RoundedCornerShape(36.dp), elevation = 10.dp, baseAlpha = 0.82f)
     ) {
         Row(
             modifier = Modifier
@@ -1029,7 +1019,7 @@ fun LiquidSwitch(
     val accent = LiquidTheme.accentColor
 
     val thumbOffset by animateFloatAsState(
-        targetValue = if (checked) 20f else 0f,
+        targetValue = if (checked) 28f else 0f,
         animationSpec = spring(dampingRatio = 0.65f, stiffness = 500f),
         label = "switch_thumb"
     )
@@ -1049,7 +1039,7 @@ fun LiquidSwitch(
 
     Box(
         modifier = modifier
-            .size(width = 51.dp, height = 31.dp)
+            .size(width = 60.dp, height = 32.dp)
             .clip(trackShape)
             .background(offTrack)
             .background(
@@ -1063,13 +1053,13 @@ fun LiquidSwitch(
                 indication = null,
                 role = Role.Switch
             ) { onCheckedChange(!checked) }
-            .padding(2.dp),
+            .padding(4.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Box(
             modifier = Modifier
                 .offset(x = thumbOffset.dp)
-                .size(27.dp)
+                .size(24.dp)
                 .graphicsLayer { scaleX = thumbScale; scaleY = thumbScale }
                 .shadow(3.dp, CircleShape)
                 .background(Color.White, CircleShape)
@@ -1289,7 +1279,9 @@ fun LiquidTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
+                .liquidGlass(shape = RoundedCornerShape(24.dp), elevation = 4.dp, baseAlpha = 0.7f)
+                .height(52.dp)
+                .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
