@@ -41,7 +41,8 @@ class ReminderReceiver : BroadcastReceiver() {
                 reminderId = id,
                 timeStr = timeStr,
                 title = title,
-                message = message
+                message = message,
+                channelId = channel
             )
         }
     }

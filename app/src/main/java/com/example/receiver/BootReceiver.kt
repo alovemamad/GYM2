@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.example.data.local.UserPreferences
+import com.example.util.NotificationHelper
 import com.example.util.ReminderScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +28,8 @@ class BootReceiver : BroadcastReceiver() {
                             reminderId = ReminderScheduler.ID_WORKOUT,
                             timeStr = settings.workoutReminderTime,
                             title = "وقت تمرین و باشگاه!",
-                            message = "امروز روز ساختن بدنی قوی‌تر است. برنامه‌ی تمرینت منتظرته!"
+                            message = "امروز روز ساختن بدنی قوی‌تر است. برنامه‌ی تمرینت منتظرته!",
+                            channelId = NotificationHelper.CHANNEL_WORKOUT
                         )
                     }
 
@@ -37,7 +39,8 @@ class BootReceiver : BroadcastReceiver() {
                             reminderId = ReminderScheduler.ID_WATER,
                             timeStr = settings.waterReminderTime,
                             title = "یادآور نوشیدن آب",
-                            message = "هیدراته بمانید! یک لیوان آب خنک بنوشید."
+                            message = "هیدراته بمانید! یک لیوان آب خنک بنوشید.",
+                            channelId = NotificationHelper.CHANNEL_WATER
                         )
                     }
 
@@ -47,7 +50,8 @@ class BootReceiver : BroadcastReceiver() {
                             reminderId = ReminderScheduler.ID_SUPPLEMENT,
                             timeStr = settings.supplementReminderTime,
                             title = "یادآور مصرف مکمل‌ها",
-                            message = "زمان مصرف مکمل‌های روزانه فرا رسیده است."
+                            message = "زمان مصرف مکمل‌های روزانه فرا رسیده است.",
+                            channelId = NotificationHelper.CHANNEL_SUPPLEMENT
                         )
                     }
                 } catch (_: Exception) {}
