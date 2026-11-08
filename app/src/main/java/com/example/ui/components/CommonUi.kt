@@ -38,6 +38,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.*
 import com.example.util.PersianNumberHelper
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.hazeEffect
 
 // ==========================================
 // 1. LIQUID GLASS BASE MODIFIERS
@@ -45,19 +48,42 @@ import com.example.util.PersianNumberHelper
 
 @Composable
 fun Modifier.liquidGlass(
+    hazeState: HazeState? = null,
     shape: Shape = RoundedCornerShape(24.dp),
-    tintAlpha: Float? = null,
-    borderAlpha: Float = 0.5f,
+    tintAlpha: Float = 0.85f, // شفافیت بالا برای خوانایی
     elevation: Dp = 8.dp
 ): Modifier {
     val isDark = LiquidTheme.isDark
-    val bgColor = if (isDark) Color(0xFF1E1E1E).copy(alpha = tintAlpha ?: 0.7f) else Color.White.copy(alpha = tintAlpha ?: 0.8f)
-    val borderBrush = Brush.linearGradient(colors = listOf(Color.White.copy(alpha = if (isDark) 0.2f else 0.8f), Color.Transparent))
+    
+    // رنگ پس‌زمینه کارت
+    val bgColor = if (isDark) Color(0xFF1E1E1E).copy(alpha = tintAlpha) else Color.White.copy(alpha = tintAlpha)
+    
+    // حاشیه نوری (Specular) از بالا
+    val borderBrush = Brush.linearGradient(
+        colors = listOf(
+            Color.White.copy(alpha = if (isDark) 0.2f else 0.8f),
+            Color.Transparent
+        )
+    )
 
     return this
         .shadow(elevation = elevation, shape = shape, spotColor = Color.Black.copy(alpha = 0.3f))
         .clip(shape)
-        .background(bgColor)
+        .then(
+            if (hazeState != null) {
+                Modifier.hazeEffect(
+                    state = hazeState,
+                    style = HazeStyle(
+                        backgroundColor = bgColor,
+                        tints = emptyList(),
+                        blurRadius = 20.dp,
+                        noiseFactor = 0.1f
+                    )
+                )
+            } else {
+                Modifier.background(bgColor)
+            }
+        )
         .border(BorderStroke(1.dp, borderBrush), shape = shape)
 }
 
@@ -76,13 +102,26 @@ fun Modifier.liquidTapEffect(enabled: Boolean = true, onClick: () -> Unit): Modi
 // ==========================================
 
 @Composable
-fun SolidGroupedCard(modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(24.dp), content: @Composable ColumnScope.() -> Unit) {
-    Box(modifier = modifier.fillMaxWidth().liquidGlass(shape = shape, elevation = 4.dp)) { Column(Modifier.fillMaxWidth(), content = content) }
+fun SolidGroupedCard(
+    hazeState: HazeState? = null,
+    modifier: Modifier = Modifier, 
+    shape: Shape = RoundedCornerShape(24.dp), 
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Box(modifier = modifier.fillMaxWidth().liquidGlass(hazeState = hazeState, shape = shape, elevation = 4.dp)) {
+        Column(Modifier.fillMaxWidth(), content = content)
+    }
 }
 
 @Composable
-fun LiquidGlassBox(modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(24.dp), elevation: Dp = 8.dp, content: @Composable BoxScope.() -> Unit) {
-    Box(modifier = modifier.liquidGlass(shape = shape, elevation = elevation), content = content)
+fun LiquidGlassBox(
+    hazeState: HazeState? = null,
+    modifier: Modifier = Modifier, 
+    shape: Shape = RoundedCornerShape(24.dp), 
+    elevation: Dp = 8.dp, 
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(modifier = modifier.liquidGlass(hazeState = hazeState, shape = shape, elevation = elevation), content = content)
 }
 
 @Composable
@@ -94,13 +133,24 @@ fun LiquidSectionHeader(title: String, modifier: Modifier = Modifier, actionText
 }
 
 @Composable
-fun GroupedRow(title: String, modifier: Modifier = Modifier, subtitle: String? = null, icon: ImageVector? = null, iconTint: Color = LiquidTheme.accentColor, iconBackground: Color? = null, valueText: String? = null, showArrow: Boolean = true, showDivider: Boolean = true, onClick: (() -> Unit)? = null, trailingContent: (@Composable () -> Unit)? = null) {
+fun GroupedRow(
+    title: String, 
+    modifier: Modifier = Modifier, 
+    subtitle: String? = null, 
+    icon: ImageVector? = null, 
+    iconTint: Color = LiquidTheme.accentColor, 
+    iconBackground: Color? = null, 
+    valueText: String? = null, 
+    showArrow: Boolean = true, 
+    showDivider: Boolean = true, 
+    onClick: (() -> Unit)? = null, 
+    trailingContent: (@Composable () -> Unit)? = null
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val lightOffset by animateFloatAsState(if (isPressed) 100f else -100f, tween(300), label = "light")
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth().clickable(interactionSource, null, enabled = onClick != null) { onClick?.invoke() }.background(Brush.linearGradient(listOf(Color.White.copy(alpha = if (isPressed) 0.1f else 0.0f), Color.Transparent), start = Offset(lightOffset, 0f), end = Offset(lightOffset + 200f, 0f))).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(modifier = Modifier.fillMaxWidth().clickable(interactionSource, null, enabled = onClick != null) { onClick?.invoke() }.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.weight(1f, fill = false)) {
                 if (icon != null) Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(iconBackground ?: iconTint.copy(alpha = 0.2f)).border(0.5.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp)) }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -297,8 +347,8 @@ fun LiquidTopBar(title: String, modifier: Modifier = Modifier, navigationIcon: (
 @Composable
 fun LiquidAlertDialog(onDismissRequest: () -> Unit, title: String, message: String, confirmText: String, onConfirm: () -> Unit, dismissText: String? = null, isDestructive: Boolean = false, content: (@Composable () -> Unit)? = null) {
     Dialog(onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)).clickable { onDismissRequest() }, contentAlignment = Alignment.Center) {
-            Box(Modifier.width(320.dp).clickable(enabled = false) {}.background(LiquidTheme.surfaceSolid, RoundedCornerShape(24.dp)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp)).shadow(16.dp, RoundedCornerShape(24.dp))) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.85f)).clickable { onDismissRequest() }, contentAlignment = Alignment.Center) { // پس‌زمینه تیره‌تر
+            Box(Modifier.width(320.dp).clickable(enabled = false) {}.background(LiquidTheme.surfaceSolid.copy(alpha = 1f), RoundedCornerShape(24.dp)).border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(24.dp)).shadow(16.dp, RoundedCornerShape(24.dp))) { // دیالوگ کاملاً مات
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = LiquidTheme.textPrimary)
@@ -360,5 +410,6 @@ fun LiquidTimePickerDialog(initialTime: String, title: String = "انتخاب س
 
 @Composable
 fun LiquidGlassRoot(content: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().background(LiquidTheme.backgroundNeutral)) { content() }
-}
+    // یک پس‌زمینه گرادیانتی ملایم برای اینکه افکت شیشه دیده بشه
+    val bgBrush = Brush.linearGradient(
+        colors = if (LiquidTheme
