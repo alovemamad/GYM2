@@ -25,13 +25,17 @@ class ReminderReceiver : BroadcastReceiver() {
         val isDaily = intent.getBooleanExtra(EXTRA_IS_DAILY, false)
         val timeStr = intent.getStringExtra(EXTRA_TIME_STR)
 
-        // Show the notification
+        // Show the notification and play the alert at the user's chosen volume
+        val pending = goAsync()
+        val finish = { try { pending.finish() } catch (_: Exception) {} }
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(finish, 6000)
         NotificationHelper.showNotification(
             context = context,
             notificationId = id,
             channelId = channel,
             title = title,
-            message = message
+            message = message,
+            onSoundDone = finish
         )
 
         // If it's a repeating daily alarm, schedule next day's alarm
