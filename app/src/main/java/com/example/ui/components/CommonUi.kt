@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -68,6 +69,46 @@ val LocalHazeState = compositionLocalOf<HazeState?> { null }
 // 1. LIQUID GLASS BASE MODIFIERS & ROOT
 // ==========================================
 
+/**
+ * شکست نور مایع (AGSL، اندروید ۱۳+): امواج آرام روی تصویر پس‌زمینه + لنز بزرگ‌نما زیر انگشت.
+ * شیشه‌ها این تصویر را بلور می‌کنند و در نتیجه درون کارت‌ها «مایع» جاری دیده می‌شود.
+ */
+@RequiresApi(33)
+private class LiquidRefraction {
+    private val shader = android.graphics.RuntimeShader(
+        """
+        uniform shader content;
+        uniform float2 touch;
+        uniform float strength;
+        uniform float radius;
+        uniform float time;
+        half4 main(float2 p) {
+            float2 q = p;
+            q.x += sin(p.y * 0.012 + time) * 7.0 + sin(p.y * 0.031 - time * 2.0) * 3.0;
+            q.y += cos(p.x * 0.011 + time) * 7.0 + cos(p.x * 0.027 + time * 2.0) * 3.0;
+            float2 d = q - touch;
+            float r = length(d);
+            if (strength > 0.001 && r < radius) {
+                float t = r / radius;
+                float k = 1.0 - strength * 0.5 * (1.0 - t * t);
+                q = touch + d * k;
+            }
+            return content.eval(q);
+        }
+        """.trimIndent()
+    )
+
+    fun effect(tx: Float, ty: Float, strength: Float, radius: Float, time: Float): RenderEffect {
+        shader.setFloatUniform("touch", tx, ty)
+        shader.setFloatUniform("strength", strength)
+        shader.setFloatUniform("radius", radius)
+        shader.setFloatUniform("time", time)
+        return android.graphics.RenderEffect
+            .createRuntimeShaderEffect(shader, "content")
+            .asComposeRenderEffect()
+    }
+}
+
 // فاز زمانی مشترک برای حرکت آرام نور و جلوه‌های مایع (۰..۱ تکرارشونده)
 val LocalGlassPhase = compositionLocalOf<State<Float>> { mutableStateOf(0f) }
 
@@ -92,6 +133,12 @@ fun LiquidGlassRoot(
         animationSpec = infiniteRepeatable(tween(16000, easing = LinearEasing)),
         label = "phase"
     )
+
+    val refraction: Any? = remember {
+        if (Build.VERSION.SDK_INT >= 33) {
+            try { LiquidRefraction() } catch (_: Throwable) { null }
+        } else null
+    }
 
     // Touch lens state
     var touch by remember { mutableStateOf(Offset(0f, 0f)) }
@@ -121,10 +168,22 @@ fun LiquidGlassRoot(
                     .fillMaxSize()
                     .graphicsLayer {
                         val t = phase.value * 2f * PI.toFloat()
-                        scaleX = 1.14f
-                        scaleY = 1.14f
+                        val sc = 1.14f
+                        scaleX = sc
+                        scaleY = sc
                         translationX = sin(t) * 18f
                         translationY = cos(t) * 12f
+                        if (Build.VERSION.SDK_INT >= 33 && refraction != null) {
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
+                            val lx = (lensPos.x - cx) / sc + cx
+                            val ly = (lensPos.y - cy) / sc + cy
+                            renderEffect = (refraction as LiquidRefraction).effect(
+                                lx, ly, lensAlpha,
+                                52.dp.toPx() / sc,
+                                phase.value * 6f * PI.toFloat()
+                            )
+                        }
                     }
             )
             Box(modifier = Modifier.fillMaxSize().background(bgTint))
@@ -164,7 +223,7 @@ fun LiquidGlassRoot(
                 .drawWithContent {
                     drawContent()
                     if (lensAlpha > 0.01f) {
-                        val r = 44.dp.toPx() * (0.85f + 0.15f * lensAlpha)
+                        val r = 52.dp.toPx() * (0.9f + 0.1f * lensAlpha)
                         // refraction-like body
                         drawCircle(
                             brush = Brush.radialGradient(
@@ -332,12 +391,16 @@ fun Modifier.liquidTapEffect(
     val haptic = LocalHapticFeedback.current
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
+        animationSpec = spring(dampingRatio = 0.42f, stiffness = 420f),
         label = "liquid_tap"
     )
 
     return if (!enabled) this else this
-        .scale(scale)
+        .graphicsLayer {
+            // حالت ژله‌ای: موقع لمس کمی پهن‌تر و کوتاه‌تر می‌شود
+            scaleX = 1f + (1f - scale) * 0.6f
+            scaleY = scale
+        }
         .pointerInput(Unit) {
             detectTapGestures(
                 onPress = {
