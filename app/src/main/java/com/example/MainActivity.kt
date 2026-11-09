@@ -218,17 +218,14 @@ class MainActivity : ComponentActivity() {
                                 AnimatedContent(
                                     targetState = screenRoute,
                                     transitionSpec = {
-                                        // «محو شدن عبوری»: صفحه‌ی قبلی اول کامل محو می‌شود، بعد صفحه‌ی جدید می‌آید؛
-                                        // دیگر دو صفحه روی هم دیده نمی‌شوند
+                                        // بدون هیچ فریم خالی: صفحه‌ی جدید فوراً جایگزین می‌شود
+                                        // و فقط کمی (بدون شفافیت صفر) لغزیده و بزرگ می‌شود
                                         val order = Screen.bottomNavItems.map { it.route }
                                         val dir = if (order.indexOf(targetState) > order.indexOf(initialState)) 1 else -1
-                                        (fadeIn(tween(220, delayMillis = 90)) +
-                                            slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { (it / 9) * dir } +
-                                            scaleIn(tween(300, delayMillis = 60, easing = FastOutSlowInEasing), initialScale = 0.965f))
-                                            .togetherWith(
-                                                fadeOut(tween(90)) +
-                                                    slideOutHorizontally(tween(200)) { -(it / 14) * dir }
-                                            )
+                                        (fadeIn(tween(160), initialAlpha = 0.82f) +
+                                            slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { (it / 14) * dir } +
+                                            scaleIn(tween(300, easing = FastOutSlowInEasing), initialScale = 0.975f))
+                                            .togetherWith(ExitTransition.None)
                                             .using(SizeTransform(clip = false))
                                     },
                                     label = "tab_transition"
