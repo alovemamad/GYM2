@@ -7,7 +7,9 @@ import com.example.util.BackupHelper
 import com.example.util.JalaliCalendar
 import com.example.widget.WaterAppWidgetProvider
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 
 class GymRepository(
     private val context: Context,
@@ -276,7 +278,17 @@ class GymRepository(
         return restoreFromContainer(result.getOrNull()!!)
     }
 
-    suspend fun restoreFromContainer(data: BackupContainer): Result<Unit> {
+    suspend fun restoreFromContainer(data: BackupContainer): Result<Unit> = withContext(Dispatchers.IO) {
+        // clearAllTables روی ترد اصلی کرش می‌کند؛ کل بازیابی روی IO و با گرفتن خطا انجام می‌شود
+        try {
+            doRestore(data)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun doRestore(data: BackupContainer) {
 
         // Clear existing tables
         workoutDao.clearAllSetLogs()
@@ -327,11 +339,22 @@ class GymRepository(
             measurementDao.insertOrUpdateMeasurement(m)
         }
 
-        WaterAppWidgetProvider.updateAllWidgets(context)
-        return Result.success(Unit)
+        // Restore skipped/rescheduled plan days
+        data.skips.forEach { sk ->
+            val targetPlanId = planIdMap[sk.planId] ?: sk.planId
+            try {
+                workoutDao.insertSkip(sk.copy(id = 0, planId = targetPlanId))
+            } catch (_: Exception) {
+            }
+        }
+
+        try {
+            WaterAppWidgetProvider.updateAllWidgets(context)
+        } catch (_: Exception) {
+        }
     }
 
-    suspend fun clearAllData() {
+    suspend fun clearAllData() = withContext(Dispatchers.IO) {
         appDatabase.clearAllTables()
         userPreferences.clearAll()
         WaterAppWidgetProvider.updateAllWidgets(context)
