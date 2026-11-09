@@ -273,19 +273,18 @@ fun LiquidGlassRoot(
     }
 }
 
-/** ورود نرم: محو شدن + بالا آمدن + بزرگ شدن فنری. */
+/** ورود نرم بدون شفافیت صفر (تا هیچ‌وقت فریم خالی دیده نشود): فقط کمی بالا آمدن و بزرگ شدن فنری. */
 @Composable
 fun Modifier.liquidAppear(delayMs: Int = 0): Modifier {
     val progress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         delay(delayMs.toLong())
-        progress.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 260f))
+        progress.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 320f))
     }
     return this.graphicsLayer {
         val p = progress.value
-        alpha = p.coerceIn(0f, 1f)
-        translationY = (1f - p) * 36f
-        val sc = 0.95f + 0.05f * p
+        translationY = (1f - p) * 18f
+        val sc = 0.975f + 0.025f * p
         scaleX = sc
         scaleY = sc
     }
