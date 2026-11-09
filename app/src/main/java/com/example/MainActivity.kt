@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -214,10 +215,23 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .padding(innerPadding)
                             ) {
-                                Crossfade(
+                                AnimatedContent(
                                     targetState = screenRoute,
-                                    animationSpec = tween(durationMillis = 180),
-                                    label = "tab_crossfade"
+                                    transitionSpec = {
+                                        // «محو شدن عبوری»: صفحه‌ی قبلی اول کامل محو می‌شود، بعد صفحه‌ی جدید می‌آید؛
+                                        // دیگر دو صفحه روی هم دیده نمی‌شوند
+                                        val order = Screen.bottomNavItems.map { it.route }
+                                        val dir = if (order.indexOf(targetState) > order.indexOf(initialState)) 1 else -1
+                                        (fadeIn(tween(220, delayMillis = 90)) +
+                                            slideInHorizontally(tween(340, easing = FastOutSlowInEasing)) { (it / 9) * dir } +
+                                            scaleIn(tween(300, delayMillis = 60, easing = FastOutSlowInEasing), initialScale = 0.965f))
+                                            .togetherWith(
+                                                fadeOut(tween(90)) +
+                                                    slideOutHorizontally(tween(200)) { -(it / 14) * dir }
+                                            )
+                                            .using(SizeTransform(clip = false))
+                                    },
+                                    label = "tab_transition"
                                 ) { route ->
                                 when (route) {
                                     Screen.Dashboard.route -> {
