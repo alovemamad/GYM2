@@ -17,56 +17,44 @@ import java.io.File
 
 class GymViewModel(application: Application) : AndroidViewModel(application) {
 
+    /**
+     * مقدار اولیه را همان لحظه از دیتابیس/تنظیمات می‌خواند تا هنگام ورود به برنامه
+     * صفحه‌ی خالی، آنبوردینگ یا تم پیش‌فرض برای چند فریم نمایش داده نشود.
+     */
+    private fun <T> Flow<T>.stateInPreloaded(default: T): StateFlow<T> {
+        val initial = try {
+            kotlinx.coroutines.runBlocking { this@stateInPreloaded.first() }
+        } catch (_: Exception) {
+            default
+        }
+        return stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initial)
+    }
+
     private val db = AppDatabase.getInstance(application)
     private val prefs = UserPreferences(application)
     val repository = GymRepository(application, db, prefs)
 
-    val userSettings = repository.userSettings.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        UserSettings()
+    val userSettings = repository.userSettings.stateInPreloaded(UserSettings()
     )
 
-    val allPlans = repository.allPlans.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+    val allPlans = repository.allPlans.stateInPreloaded(emptyList()
     )
 
-    val allHistories = repository.allHistories.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+    val allHistories = repository.allHistories.stateInPreloaded(emptyList()
     )
 
-    val allSupplements = repository.allSupplements.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+    val allSupplements = repository.allSupplements.stateInPreloaded(emptyList()
     )
 
-    val allMeasurements = repository.allMeasurements.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+    val allMeasurements = repository.allMeasurements.stateInPreloaded(emptyList()
     )
 
-    val latestMeasurement = repository.latestMeasurement.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        null
+    val latestMeasurement = repository.latestMeasurement.stateInPreloaded(null)
+
+    val allSkips = repository.allSkips.stateInPreloaded(emptyList()
     )
 
-    val allSkips = repository.allSkips.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
-    )
-
-    val datesWithNutrition = repository.datesWithNutrition.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+    val datesWithNutrition = repository.datesWithNutrition.stateInPreloaded(emptyList()
     )
 
     // Selected date for nutrition tab (defaults to today Gregorian)
@@ -75,26 +63,20 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
 
     val selectedNutritionLog = _selectedNutritionDate.flatMapLatest { date ->
         repository.getNutritionLog(date)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    }.stateInPreloaded(null)
 
     val selectedDateSupplementIntakes = _selectedNutritionDate.flatMapLatest { date ->
         repository.getSupplementIntakeForDate(date)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.stateInPreloaded(emptyList())
 
-    val allSupplementIntakeHistories = repository.allSupplementIntakeHistories.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+    val allSupplementIntakeHistories = repository.allSupplementIntakeHistories.stateInPreloaded(emptyList()
     )
 
     val todayNutritionLog = repository.getNutritionLog(JalaliCalendar.getTodayGregorian())
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .stateInPreloaded(null)
 
     // Unfinished active sets check (for resumption)
-    val unfinishedActiveSets = repository.allSetLogs.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
+    val unfinishedActiveSets = repository.allSetLogs.stateInPreloaded(emptyList()
     )
 
     init {
