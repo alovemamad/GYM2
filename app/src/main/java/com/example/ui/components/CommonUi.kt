@@ -78,30 +78,20 @@ private class LiquidRefraction {
     private val shader = android.graphics.RuntimeShader(
         """
         uniform shader content;
-        uniform float2 touch;
-        uniform float strength;
-        uniform float radius;
         uniform float time;
         half4 main(float2 p) {
-            float2 q = p;
-            q.x += sin(p.y * 0.012 + time) * 7.0 + sin(p.y * 0.031 - time * 2.0) * 3.0;
-            q.y += cos(p.x * 0.011 + time) * 7.0 + cos(p.x * 0.027 + time * 2.0) * 3.0;
-            float2 d = q - touch;
-            float r = length(d);
-            if (strength > 0.001 && r < radius) {
-                float t = r / radius;
-                float k = 1.0 - strength * 0.5 * (1.0 - t * t);
-                q = touch + d * k;
-            }
+            float2 w = float2(
+                sin(p.y * 0.010 + time) + sin(p.y * 0.023 - time * 2.0) * 0.5,
+                cos(p.x * 0.009 + time) + cos(p.x * 0.021 + time * 2.0) * 0.5
+            );
+            float2 q = p + w * 22.0;
+            q += float2(sin(q.y * 0.017 - time), cos(q.x * 0.015 + time)) * 14.0;
             return content.eval(q);
         }
         """.trimIndent()
     )
 
-    fun effect(tx: Float, ty: Float, strength: Float, radius: Float, time: Float): RenderEffect {
-        shader.setFloatUniform("touch", tx, ty)
-        shader.setFloatUniform("strength", strength)
-        shader.setFloatUniform("radius", radius)
+    fun effect(time: Float): RenderEffect {
         shader.setFloatUniform("time", time)
         return android.graphics.RenderEffect
             .createRuntimeShaderEffect(shader, "content")
@@ -113,8 +103,10 @@ private class LiquidRefraction {
 val LocalGlassPhase = compositionLocalOf<State<Float>> { mutableStateOf(0f) }
 
 /**
- * Root container: botanical backdrop (slow liquid drift), palette-tinted atmosphere,
- * and a touch-following "liquid lens" like the reference videos.
+ * Root container. دو لایه‌ی پس‌زمینه:
+ *  ۱) لایه‌ی منبعِ شیشه (زیر haze): همان عکس برگ‌ها با چرخش مایع مرمری — شیشه‌ها این را بلور می‌کنند،
+ *     پس درون کارت‌ها مثل ویدیوی مرجع «مایعِ جاری» دیده می‌شود.
+ *  ۲) روی آن، همان عکس ثابت و واضح؛ بنابراین بیرون از شیشه پس‌زمینه ساکن و شفاف می‌ماند.
  */
 @Composable
 fun LiquidGlassRoot(
@@ -125,6 +117,13 @@ fun LiquidGlassRoot(
     val accent = LiquidTheme.accentColor
     val palette = LiquidTheme.palette
     val bgTint = if (isDark) Color.Black.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.12f)
+    val paletteWash = Brush.verticalGradient(
+        listOf(
+            accent.copy(alpha = if (isDark) 0.30f else 0.22f),
+            Color.Transparent,
+            palette.gradientEnd.copy(alpha = if (isDark) 0.30f else 0.14f)
+        )
+    )
 
     val transition = rememberInfiniteTransition(label = "glass_phase")
     val phase = transition.animateFloat(
@@ -140,21 +139,8 @@ fun LiquidGlassRoot(
         } else null
     }
 
-    // Touch lens state
-    var touch by remember { mutableStateOf(Offset(0f, 0f)) }
-    var touching by remember { mutableStateOf(false) }
-    val lensPos by animateOffsetAsState(
-        targetValue = touch,
-        animationSpec = spring(dampingRatio = 0.75f, stiffness = 420f),
-        label = "lens_pos"
-    )
-    val lensAlpha by animateFloatAsState(
-        targetValue = if (touching) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 260f),
-        label = "lens_alpha"
-    )
-
     Box(modifier = Modifier.fillMaxSize()) {
+        // ۱) منبع شیشه (چرخش مایع)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -167,102 +153,34 @@ fun LiquidGlassRoot(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        val t = phase.value * 2f * PI.toFloat()
-                        val sc = 1.14f
-                        scaleX = sc
-                        scaleY = sc
-                        translationX = sin(t) * 18f
-                        translationY = cos(t) * 12f
+                        scaleX = 1.14f
+                        scaleY = 1.14f
                         if (Build.VERSION.SDK_INT >= 33 && refraction != null) {
-                            val cx = size.width / 2f
-                            val cy = size.height / 2f
-                            val lx = (lensPos.x - cx) / sc + cx
-                            val ly = (lensPos.y - cy) / sc + cy
-                            renderEffect = (refraction as LiquidRefraction).effect(
-                                lx, ly, lensAlpha,
-                                52.dp.toPx() / sc,
-                                phase.value * 6f * PI.toFloat()
-                            )
+                            renderEffect = (refraction as LiquidRefraction)
+                                .effect(phase.value * 4f * PI.toFloat())
                         }
                     }
             )
             Box(modifier = Modifier.fillMaxSize().background(bgTint))
-            // رنگ پالت انتخابی روی کل فضای برنامه می‌نشیند
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                accent.copy(alpha = if (isDark) 0.30f else 0.22f),
-                                Color.Transparent,
-                                palette.gradientEnd.copy(alpha = if (isDark) 0.30f else 0.14f)
-                            )
-                        )
-                    )
-            )
+            Box(modifier = Modifier.fillMaxSize().background(paletteWash))
         }
 
-        Box(
+        // ۲) پس‌زمینه‌ی ثابت و واضح (بالای منبع، زیر محتوا)
+        Image(
+            painter = painterResource(id = R.drawable.img_liquid_glass_bg),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val pressed = event.changes.firstOrNull { it.pressed }
-                            if (pressed != null) {
-                                touch = pressed.position
-                                touching = true
-                            } else {
-                                touching = false
-                            }
-                        }
-                    }
+                .graphicsLayer {
+                    scaleX = 1.14f
+                    scaleY = 1.14f
                 }
-                .drawWithContent {
-                    drawContent()
-                    if (lensAlpha > 0.01f) {
-                        val r = 52.dp.toPx() * (0.9f + 0.1f * lensAlpha)
-                        // refraction-like body
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.02f * lensAlpha),
-                                    Color.White.copy(alpha = 0.10f * lensAlpha),
-                                    Color.White.copy(alpha = 0.26f * lensAlpha)
-                                ),
-                                center = lensPos,
-                                radius = r
-                            ),
-                            radius = r,
-                            center = lensPos
-                        )
-                        // specular rim
-                        drawCircle(
-                            brush = Brush.sweepGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.85f * lensAlpha),
-                                    Color.White.copy(alpha = 0.12f * lensAlpha),
-                                    Color.White.copy(alpha = 0.55f * lensAlpha),
-                                    Color.White.copy(alpha = 0.12f * lensAlpha),
-                                    Color.White.copy(alpha = 0.85f * lensAlpha)
-                                ),
-                                center = lensPos
-                            ),
-                            radius = r,
-                            center = lensPos,
-                            style = Stroke(width = 1.6.dp.toPx())
-                        )
-                        // inner touch dot
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.85f * lensAlpha),
-                            radius = 4.5.dp.toPx(),
-                            center = lensPos
-                        )
-                    }
-                }
-        ) {
+        )
+        Box(modifier = Modifier.fillMaxSize().background(bgTint))
+        Box(modifier = Modifier.fillMaxSize().background(paletteWash))
+
+        Box(modifier = Modifier.fillMaxSize()) {
             CompositionLocalProvider(
                 LocalHazeState provides hazeState,
                 LocalGlassPhase provides phase
@@ -302,46 +220,34 @@ fun Modifier.liquidAppear(delayMs: Int = 0): Modifier {
 fun Modifier.liquidGlass(
     hazeState: HazeState? = LocalHazeState.current,
     shape: Shape = RoundedCornerShape(22.dp),
-    tintAlpha: Float = if (LiquidTheme.isDark) 0.18f else 0.24f,
+    tintAlpha: Float = if (LiquidTheme.isDark) 0.34f else 0.24f,
     elevation: Dp = 8.dp,
     borderAlpha: Float = if (LiquidTheme.isDark) 0.80f else 0.90f,
-    accentTintAlpha: Float = 0.09f
+    accentTintAlpha: Float = 0.06f
 ): Modifier {
     val isDark = LiquidTheme.isDark
     val accent = LiquidTheme.accentColor
-    val phase = LocalGlassPhase.current
-    val bgColor = if (isDark) Color(0xFF0A120D).copy(alpha = tintAlpha) else Color.White.copy(alpha = tintAlpha)
+    // شیشه‌ی سبزِ تیره‌ی نیمه‌شفاف مثل ویدیوی مرجع
+    val bgColor = if (isDark) Color(0xFF0B1A10).copy(alpha = tintAlpha) else Color.White.copy(alpha = tintAlpha)
 
-    // Specular border gradient: bright white top-left highlight fading to subtle translucent edge
+    // لبه‌ی نازک و ظریف: کمی روشن در گوشه‌ی بالا-چپ، تقریباً نامرئی در بقیه
     val borderBrush = Brush.linearGradient(
         colors = listOf(
-            Color.White.copy(alpha = borderAlpha),
-            Color.White.copy(alpha = borderAlpha * 0.35f),
-            Color.White.copy(alpha = 0.08f),
-            Color.White.copy(alpha = 0.10f),
-            Color.White.copy(alpha = borderAlpha * 0.38f)
+            Color.White.copy(alpha = borderAlpha * 0.42f),
+            Color.White.copy(alpha = 0.07f),
+            Color.White.copy(alpha = 0.07f),
+            Color.White.copy(alpha = borderAlpha * 0.22f)
         ),
         start = Offset(0f, 0f),
         end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-    )
-
-    // Inner glossy reflection sheen
-    val innerSpecularBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color.White.copy(alpha = 0.16f),
-            Color.White.copy(alpha = 0.03f),
-            Color.Transparent
-        ),
-        startY = 0f,
-        endY = 100f
     )
 
     return this
         .shadow(
             elevation = elevation,
             shape = shape,
-            spotColor = Color.Black.copy(alpha = 0.35f),
-            ambientColor = Color.Black.copy(alpha = 0.20f)
+            spotColor = Color.Black.copy(alpha = 0.22f),
+            ambientColor = Color.Black.copy(alpha = 0.12f)
         )
         .clip(shape)
         .then(
@@ -351,8 +257,8 @@ fun Modifier.liquidGlass(
                     style = HazeStyle(
                         backgroundColor = bgColor,
                         tints = emptyList(),
-                        blurRadius = 16.dp,
-                        noiseFactor = 0.04f
+                        blurRadius = 22.dp,
+                        noiseFactor = 0.03f
                     )
                 )
             } else {
@@ -362,20 +268,14 @@ fun Modifier.liquidGlass(
         .drawBehind {
             // رنگ پالت روی شیشه
             drawRect(accent.copy(alpha = accentTintAlpha))
-            // برق نوری که آرام روی شیشه می‌لغزد
-            val w = size.width
-            val h = size.height
-            val x = (phase.value * 2.4f - 0.7f) * (w + h)
-            drawRect(
-                brush = Brush.linearGradient(
-                    colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.11f), Color.Transparent),
-                    start = Offset(x - h, 0f),
-                    end = Offset(x, h)
-                )
-            )
+            // تیره شدن نرم لبه‌ها (شکست نور در لبه‌ی شیشه، مثل ویدیو)
+            val outline = shape.createOutline(size, layoutDirection, this)
+            val ring = minOf(8.dp.toPx(), minOf(size.width, size.height) * 0.2f)
+            drawOutline(outline, Color.Black.copy(alpha = 0.09f), style = Stroke(width = ring * 2f))
+            drawOutline(outline, Color.Black.copy(alpha = 0.09f), style = Stroke(width = ring * 1.2f))
+            drawOutline(outline, Color.Black.copy(alpha = 0.09f), style = Stroke(width = ring * 0.6f))
         }
-        .background(innerSpecularBrush)
-        .border(BorderStroke(1.2.dp, borderBrush), shape = shape)
+        .border(BorderStroke(0.9.dp, borderBrush), shape = shape)
 }
 
 /**
@@ -818,8 +718,8 @@ fun LiquidPrimaryButton(
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        LiquidTheme.accentColor.copy(alpha = if (enabled) 0.88f else 0.35f),
-                        LiquidTheme.accentColor.copy(alpha = if (enabled) 0.58f else 0.2f)
+                        LiquidTheme.accentColor.copy(alpha = if (enabled) 0.70f else 0.30f),
+                        LiquidTheme.accentColor.copy(alpha = if (enabled) 0.42f else 0.16f)
                     )
                 ),
                 CircleShape
@@ -1227,30 +1127,26 @@ fun LiquidSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val thumbOffset by animateFloatAsState(
-        targetValue = if (checked) 22f else 0f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f),
-        label = "switch_thumb"
+    // پیشرفت ۰..۱ با فنر نرم؛ دستگیره‌ی شیشه‌ای وسط حرکت کشیده می‌شود (حس مایع)
+    val progress by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 330f),
+        label = "switch_progress"
     )
-
-    val trackColor = if (checked) {
-        Color.White.copy(alpha = 0.38f)
-    } else {
-        Color.Black.copy(alpha = 0.25f)
-    }
-
-    val borderColor = if (checked) {
-        Color.White.copy(alpha = 0.85f)
-    } else {
-        Color.White.copy(alpha = 0.45f)
-    }
+    val stretch = (sin(progress.coerceIn(0f, 1f) * PI.toFloat()) * 12f)
+    val thumbWidth = 26f + stretch
+    val thumbOffset = progress * 22f - stretch / 2f
 
     Box(
         modifier = modifier
             .size(54.dp, 32.dp)
-            .clip(CircleShape)
-            .background(trackColor)
-            .border(1.2.dp, borderColor, CircleShape)
+            .liquidGlass(
+                shape = CircleShape,
+                elevation = 0.dp,
+                tintAlpha = if (checked) 0.30f else 0.24f,
+                borderAlpha = 0.9f,
+                accentTintAlpha = if (checked) 0.34f else 0f
+            )
             .clickable { onCheckedChange(!checked) }
             .padding(3.dp),
         contentAlignment = Alignment.CenterStart
@@ -1258,10 +1154,15 @@ fun LiquidSwitch(
         Box(
             Modifier
                 .offset(x = thumbOffset.dp)
-                .size(26.dp)
-                .shadow(4.dp, CircleShape)
-                .background(Color.White.copy(alpha = 0.95f), CircleShape)
-                .border(0.5.dp, Color.White, CircleShape)
+                .size(width = thumbWidth.dp, height = 26.dp)
+                .shadow(3.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
+                .background(
+                    Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.97f), Color.White.copy(alpha = 0.78f))
+                    ),
+                    CircleShape
+                )
+                .border(0.6.dp, Color.White.copy(alpha = 0.55f), CircleShape)
         )
     }
 }
