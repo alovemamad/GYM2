@@ -14,6 +14,7 @@ import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -41,7 +42,9 @@ import com.example.util.JalaliCalendar
 import com.example.util.NotificationHelper
 import com.example.util.PlanShareHelper
 import com.example.util.PersianNumberHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -52,11 +55,35 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Create notification channels
-        NotificationHelper.createNotificationChannels(this)
-
         setContent {
-            val userSettings by gymViewModel.userSettings.collectAsStateWithLifecycle()
+            val loadedSettings by gymViewModel.userSettingsLoaded.collectAsStateWithLifecycle()
+            val context = LocalContext.current
+
+            val notifPermissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { /* permission callback */ }
+
+            LaunchedEffect(Unit) {
+                withContext(Dispatchers.IO) {
+                    NotificationHelper.createNotificationChannels(context.applicationContext)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (!NotificationHelper.hasNotificationPermission(context)) {
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+            }
+
+            val userSettings = loadedSettings
+            if (userSettings == null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(androidx.compose.ui.graphics.Color(0xFF0A140E))
+                )
+                return@setContent
+            }
+
             val allPlans by gymViewModel.allPlans.collectAsStateWithLifecycle()
             val allHistories by gymViewModel.allHistories.collectAsStateWithLifecycle()
             val allSupplements by gymViewModel.allSupplements.collectAsStateWithLifecycle()
@@ -85,19 +112,6 @@ class MainActivity : ComponentActivity() {
             var isShowingOnboarding by rememberSaveable { mutableStateOf(false) }
 
             val coroutineScope = rememberCoroutineScope()
-            val context = LocalContext.current
-
-            val notifPermissionLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ) { /* permission callback */ }
-
-            LaunchedEffect(Unit) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    if (!NotificationHelper.hasNotificationPermission(context)) {
-                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                }
-            }
 
             // اگر مسیر ذخیره‌شده معتبر نباشد (مثلاً بعد از بسته شدن پروسه) به پیشخوان برمی‌گردیم
             val screenRoute = if (Screen.bottomNavItems.any { it.route == currentScreen }) {

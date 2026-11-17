@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -33,6 +35,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +50,8 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.R
 import com.example.ui.theme.*
 import com.example.util.PersianNumberHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // Haze (iOS blur integration)
 import dev.chrisbanes.haze.HazeState
@@ -57,6 +62,11 @@ import dev.chrisbanes.haze.hazeChild
 
 // CompositionLocal for HazeState across the entire app
 val LocalHazeState = compositionLocalOf<HazeState?> { null }
+
+private object BotanicalBackdropCache {
+    @Volatile
+    var cachedBitmap: ImageBitmap? = null
+}
 
 // ==========================================
 // 1. LIQUID GLASS BASE MODIFIERS & ROOT
@@ -97,18 +107,38 @@ fun LiquidGlassRoot(
         if (isDark) {
             Brush.verticalGradient(
                 colors = listOf(
-                    paletteEnd.copy(alpha = 0.72f),
-                    baseTint.copy(alpha = 0.62f),
-                    paletteAccent.copy(alpha = 0.24f)
+                    paletteEnd.copy(alpha = 0.62f),
+                    baseTint.copy(alpha = 0.44f),
+                    paletteAccent.copy(alpha = 0.16f)
                 )
             )
         } else {
-            val topWash = androidx.compose.ui.graphics.lerp(baseTint, paletteStart, 0.08f).copy(alpha = 0.92f)
-            val midWash = androidx.compose.ui.graphics.lerp(Color(0xFFEBF0F6), paletteAccent, 0.10f).copy(alpha = 0.90f)
-            val botWash = androidx.compose.ui.graphics.lerp(Color(0xFFE2E9F2), paletteStart, 0.14f).copy(alpha = 0.91f)
+            val topTint = androidx.compose.ui.graphics.lerp(paletteStart, Color(0xFF0D1722), 0.30f).copy(alpha = 0.26f)
+            val midTint = androidx.compose.ui.graphics.lerp(paletteAccent, Color(0xFF0D1722), 0.25f).copy(alpha = 0.12f)
+            val botTint = androidx.compose.ui.graphics.lerp(paletteEnd, Color(0xFF0D1722), 0.30f).copy(alpha = 0.28f)
             Brush.verticalGradient(
-                colors = listOf(topWash, midWash, botWash)
+                colors = listOf(topTint, midTint, botTint)
             )
+        }
+    }
+
+    val context = LocalContext.current
+    val backdropBitmap by produceState<ImageBitmap?>(
+        initialValue = BotanicalBackdropCache.cachedBitmap,
+        key1 = Unit
+    ) {
+        if (value == null) {
+            val decoded = withContext(Dispatchers.IO) {
+                BotanicalBackdropCache.cachedBitmap ?: run {
+                    val opts = BitmapFactory.Options().apply {
+                        inPreferredConfig = Bitmap.Config.RGB_565
+                    }
+                    BitmapFactory.decodeResource(context.resources, R.drawable.img_liquid_glass_bg, opts)
+                        ?.asImageBitmap()
+                        ?.also { BotanicalBackdropCache.cachedBitmap = it }
+                }
+            }
+            value = decoded
         }
     }
 
@@ -119,15 +149,18 @@ fun LiquidGlassRoot(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color(0xFF0B1A10))
                 .haze(state = hazeState)
         ) {
-            // High-resolution botanical foliage background
-            Image(
-                painter = painterResource(id = R.drawable.img_liquid_glass_bg),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            // High-resolution botanical foliage background decoded asynchronously on Dispatchers.IO
+            backdropBitmap?.let { bmp ->
+                Image(
+                    bitmap = bmp,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             // Dynamic palette-reactive atmospheric depth overlay
             Box(
                 modifier = Modifier
@@ -149,19 +182,18 @@ fun LiquidGlassRoot(
 
 /**
  * Primary Liquid Glass modifier:
- * - Backdrop blur with Haze (16dp)
- * - Translucent HazeTint reactive to appearance mode & active palette (high readability in Day mode without harsh white glare)
- * - Specular highlight gradient border tinted with active accent color
- * - Inset vertical reflection sheen
- * - Soft ambient shadow
+ * - Deep frosted backdrop blur with Haze (22dp)
+ * - Translucent refractive HazeTint reactive to appearance mode & active palette
+ * - Crisp curved-crystal specular highlight border & inner glossy sheen
+ * - Soft accent-tinted ambient shadow
  */
 @Composable
 fun Modifier.liquidGlass(
     hazeState: HazeState? = LocalHazeState.current,
     shape: Shape = RoundedCornerShape(22.dp),
-    tintAlpha: Float = if (LiquidTheme.isDark) 0.44f else 0.78f,
+    tintAlpha: Float = if (LiquidTheme.isDark) 0.38f else 0.40f,
     elevation: Dp = 8.dp,
-    borderAlpha: Float = if (LiquidTheme.isDark) 0.68f else 0.65f
+    borderAlpha: Float = if (LiquidTheme.isDark) 0.68f else 0.78f
 ): Modifier {
     val isDark = LiquidTheme.isDark
     val accent = LiquidTheme.accentColor
@@ -171,33 +203,32 @@ fun Modifier.liquidGlass(
         glassBase.copy(alpha = tintAlpha)
     }
     val fallbackColor = remember(glassBase, isDark, tintAlpha) {
-        glassBase.copy(alpha = (tintAlpha + if (isDark) 0.28f else 0.14f).coerceAtMost(0.95f))
+        glassBase.copy(alpha = (tintAlpha + if (isDark) 0.32f else 0.30f).coerceAtMost(0.92f))
     }
 
-    // Specular border gradient: tinted glass rim without blinding white edge in Day mode
+    // Specular border gradient: crisp crystal rim highlight in both Day and Night modes
     val borderBrush = remember(isDark, accent, paletteStart, borderAlpha) {
         Brush.linearGradient(
             colors = listOf(
-                if (isDark) Color.White.copy(alpha = borderAlpha) else accent.copy(alpha = (borderAlpha * 0.56f).coerceAtMost(0.50f)),
-                accent.copy(alpha = if (isDark) 0.44f else 0.34f),
-                if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.58f),
-                paletteStart.copy(alpha = if (isDark) 0.32f else 0.26f)
+                Color.White.copy(alpha = borderAlpha),
+                accent.copy(alpha = if (isDark) 0.44f else 0.48f),
+                Color.White.copy(alpha = if (isDark) 0.16f else 0.28f),
+                paletteStart.copy(alpha = if (isDark) 0.34f else 0.40f)
             ),
             start = Offset(0f, 0f),
             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
         )
     }
 
-    // Inner glossy reflection sheen
+    // Inner glossy liquid-glass reflection sheen (top crystal gleam + subtle bottom rim bounce)
     val innerSpecularBrush = remember(isDark, accent) {
         Brush.verticalGradient(
             colors = listOf(
-                Color.White.copy(alpha = if (isDark) 0.12f else 0.22f),
-                accent.copy(alpha = if (isDark) 0.05f else 0.04f),
-                Color.Transparent
-            ),
-            startY = 0f,
-            endY = 120f
+                Color.White.copy(alpha = if (isDark) 0.14f else 0.22f),
+                accent.copy(alpha = if (isDark) 0.04f else 0.07f),
+                Color.Transparent,
+                Color.White.copy(alpha = if (isDark) 0.04f else 0.08f)
+            )
         )
     }
 
@@ -215,8 +246,8 @@ fun Modifier.liquidGlass(
         .shadow(
             elevation = elevation,
             shape = shape,
-            spotColor = accent.copy(alpha = if (isDark) 0.28f else 0.18f),
-            ambientColor = Color.Black.copy(alpha = if (isDark) 0.20f else 0.10f)
+            spotColor = accent.copy(alpha = if (isDark) 0.28f else 0.22f),
+            ambientColor = Color.Black.copy(alpha = if (isDark) 0.22f else 0.10f)
         )
         .clip(shape)
         .then(
@@ -230,7 +261,7 @@ fun Modifier.liquidGlass(
             }
         )
         .background(innerSpecularBrush)
-        .border(BorderStroke(1.1.dp, borderBrush), shape = shape)
+        .border(BorderStroke(1.2.dp, borderBrush), shape = shape)
 }
 
 /**
@@ -319,7 +350,14 @@ fun LiquidSectionHeader(
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 15.sp,
+                shadow = androidx.compose.ui.graphics.Shadow(
+                    color = Color.Black.copy(alpha = 0.55f),
+                    offset = Offset(0f, 1.5f),
+                    blurRadius = 4f
+                )
+            ),
             color = LiquidTheme.textSecondary,
             fontWeight = FontWeight.SemiBold
         )
@@ -542,7 +580,13 @@ fun CircularShortcut(
         }
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(
+                shadow = androidx.compose.ui.graphics.Shadow(
+                    color = Color.Black.copy(alpha = 0.55f),
+                    offset = Offset(0f, 1f),
+                    blurRadius = 3f
+                )
+            ),
             color = LiquidTheme.textPrimary,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
@@ -729,7 +773,7 @@ fun LiquidSecondaryButton(
             .liquidGlass(
                 shape = CircleShape,
                 elevation = 4.dp,
-                tintAlpha = if (LiquidTheme.isDark) 0.42f else 0.68f
+                tintAlpha = if (LiquidTheme.isDark) 0.34f else 0.42f
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -1100,14 +1144,14 @@ fun LiquidSwitch(
             )
         )
     } else {
-        val offColor = if (LiquidTheme.isDark) Color.Black.copy(alpha = 0.32f) else Color(0xFF94A3B8).copy(alpha = 0.45f)
+        val offColor = if (LiquidTheme.isDark) Color.Black.copy(alpha = 0.32f) else Color.Black.copy(alpha = 0.26f)
         Brush.horizontalGradient(listOf(offColor, offColor))
     }
 
     val borderColor = if (checked) {
         accent
     } else {
-        if (LiquidTheme.isDark) Color.White.copy(alpha = 0.45f) else Color(0xFF475569).copy(alpha = 0.35f)
+        if (LiquidTheme.isDark) Color.White.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.55f)
     }
 
     Box(
@@ -1321,8 +1365,8 @@ fun LiquidBottomBar(
             .liquidGlass(
                 shape = RoundedCornerShape(36.dp),
                 elevation = 12.dp,
-                tintAlpha = if (isDark) 0.50f else 0.88f,
-                borderAlpha = if (isDark) 0.72f else 0.70f
+                tintAlpha = if (isDark) 0.42f else 0.52f,
+                borderAlpha = if (isDark) 0.72f else 0.85f
             )
     ) {
         Row(
@@ -1395,8 +1439,8 @@ fun LiquidTopBar(
                 .liquidGlass(
                     shape = RoundedCornerShape(28.dp),
                     elevation = 6.dp,
-                    tintAlpha = if (LiquidTheme.isDark) 0.48f else 0.86f,
-                    borderAlpha = 0.75f
+                    tintAlpha = if (LiquidTheme.isDark) 0.38f else 0.48f,
+                    borderAlpha = if (LiquidTheme.isDark) 0.75f else 0.85f
                 )
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,

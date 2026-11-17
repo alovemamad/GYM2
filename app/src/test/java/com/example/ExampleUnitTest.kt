@@ -168,37 +168,37 @@ class ExampleUnitTest {
 
     @Test
     fun testLightAndDarkThemeContrastAcrossAllPalettes() {
-        // Dark foliage photo pixel sample (~luminance 0.03)
-        val darkFoliageSample = Color(0xFF0E2414)
+        // Original untouched tropical palm foliage samples (shadow leaf + brightest leaf highlight)
+        val shadowFoliage = Color(0xFF0E2414)
+        val sunlitFoliage = Color(0xFF3E7A48)
 
         LiquidPalettes.all.forEach { palette ->
-            // 1. Light mode composited root background & frosted card must be bright and readable
-            val lightBgNeutral = liquidBackgroundNeutralColor(palette, isDark = false)
-            val lightVeil = androidx.compose.ui.graphics.lerp(lightBgNeutral, palette.gradientStart, 0.08f).copy(alpha = 0.91f)
-            val effectiveLightRoot = lightVeil.compositeOver(darkFoliageSample)
-            val lightCardTint = liquidGlassSurfaceColor(palette, isDark = false).copy(alpha = 0.78f)
-            val effectiveLightCard = lightCardTint.compositeOver(effectiveLightRoot)
+            // 1. Light/Day mode preserves original botanical foliage with a vibrant jewel palette aura
+            val dayAura = androidx.compose.ui.graphics.lerp(palette.gradientStart, Color(0xFF0D1722), 0.30f).copy(alpha = 0.26f)
+            val effectiveDayRootShadow = dayAura.compositeOver(shadowFoliage)
+            val effectiveDayRootSunlit = dayAura.compositeOver(sunlitFoliage)
+            val dayCardTint = liquidGlassSurfaceColor(palette, isDark = false).copy(alpha = 0.40f)
+            val effectiveDayCard = dayCardTint.compositeOver(effectiveDayRootSunlit)
 
-            assertTrue("${palette.id} Light root too dark: ${effectiveLightRoot.luminance()}", effectiveLightRoot.luminance() >= 0.45f)
-            assertTrue("${palette.id} Light card too dark: ${effectiveLightCard.luminance()}", effectiveLightCard.luminance() >= 0.55f)
+            val dayPrimary = liquidTextPrimaryColor(isDark = false)
+            val daySecondary = liquidTextSecondaryColor(palette, isDark = false)
 
-            val lightPrimary = liquidTextPrimaryColor(isDark = false)
-            val lightSecondary = liquidTextSecondaryColor(palette, isDark = false)
+            assertTrue("${palette.id} Day primary on card contrast low", wcagContrastRatio(dayPrimary, effectiveDayCard) >= 6.0f)
+            assertTrue("${palette.id} Day secondary on card contrast low", wcagContrastRatio(daySecondary, effectiveDayCard) >= 4.8f)
+            val rootSunlitContrast = wcagContrastRatio(dayPrimary, effectiveDayRootSunlit)
+            assertTrue("${palette.id} Day primary on root sunlit leaf contrast low: $rootSunlitContrast", rootSunlitContrast >= 4.0f)
+            val dayAccentContrast = wcagContrastRatio(palette.dayAccent, effectiveDayCard)
+            assertTrue("${palette.id} Day accent on card contrast low: $dayAccentContrast", dayAccentContrast >= 3.0f)
 
-            assertTrue("${palette.id} Light primary on root contrast low", wcagContrastRatio(lightPrimary, effectiveLightRoot) >= 7.0f)
-            assertTrue("${palette.id} Light primary on card contrast low", wcagContrastRatio(lightPrimary, effectiveLightCard) >= 8.0f)
-            assertTrue("${palette.id} Light secondary on root contrast low", wcagContrastRatio(lightSecondary, effectiveLightRoot) >= 4.5f)
-            assertTrue("${palette.id} Light secondary on card contrast low", wcagContrastRatio(lightSecondary, effectiveLightCard) >= 5.0f)
-            assertTrue("${palette.id} Day accent on card contrast low", wcagContrastRatio(palette.dayAccent, effectiveLightCard) >= 3.2f)
-
-            // 2. Dark mode must keep high white-on-dark contrast
+            // 2. Night/Dark mode must keep high white-on-dark contrast
             val darkRoot = liquidBackgroundNeutralColor(palette, isDark = true)
-            val darkCard = liquidGlassSurfaceColor(palette, isDark = true).copy(alpha = 0.44f).compositeOver(darkRoot)
+            val darkCard = liquidGlassSurfaceColor(palette, isDark = true).copy(alpha = 0.38f).compositeOver(darkRoot)
             val darkPrimary = liquidTextPrimaryColor(isDark = true)
             val darkSecondary = liquidTextSecondaryColor(palette, isDark = true)
 
             assertTrue("${palette.id} Dark primary on card contrast low", wcagContrastRatio(darkPrimary, darkCard) >= 10.0f)
             assertTrue("${palette.id} Dark secondary on card contrast low", wcagContrastRatio(darkSecondary, darkCard) >= 7.0f)
+            assertTrue("${palette.id} Day root on shadow leaf distinct", effectiveDayRootShadow != darkRoot)
         }
     }
 

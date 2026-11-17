@@ -50,25 +50,25 @@ fun wcagContrastRatio(foreground: Color, background: Color): Float {
 
 fun liquidGlassSurfaceColor(palette: LiquidPalette, isDark: Boolean): Color {
     return if (isDark) {
-        androidx.compose.ui.graphics.lerp(Color(0xFF0B0F16), palette.gradientEnd, 0.34f)
+        androidx.compose.ui.graphics.lerp(Color(0xFF0B0F16), palette.gradientEnd, 0.32f)
     } else {
-        androidx.compose.ui.graphics.lerp(Color(0xFFF3F6FA), palette.gradientStart, 0.08f)
+        androidx.compose.ui.graphics.lerp(Color(0xFF121A26), palette.gradientEnd, 0.28f)
     }
 }
 
 fun liquidSurfaceSolidColor(palette: LiquidPalette, isDark: Boolean): Color {
     return if (isDark) {
-        androidx.compose.ui.graphics.lerp(Color(0xFF141A22), palette.gradientEnd, 0.32f).copy(alpha = 0.84f)
+        androidx.compose.ui.graphics.lerp(Color(0xFF141A22), palette.gradientEnd, 0.30f).copy(alpha = 0.80f)
     } else {
-        androidx.compose.ui.graphics.lerp(Color(0xFFEEF3F8), palette.gradientStart, 0.10f).copy(alpha = 0.94f)
+        androidx.compose.ui.graphics.lerp(Color(0xFF182230), palette.gradientEnd, 0.26f).copy(alpha = 0.78f)
     }
 }
 
 fun liquidSurfaceElevatedColor(palette: LiquidPalette, isDark: Boolean): Color {
     return if (isDark) {
-        androidx.compose.ui.graphics.lerp(Color(0xFF1E2530), palette.nightAccent, 0.18f).copy(alpha = 0.90f)
+        androidx.compose.ui.graphics.lerp(Color(0xFF1E2530), palette.nightAccent, 0.18f).copy(alpha = 0.86f)
     } else {
-        androidx.compose.ui.graphics.lerp(Color(0xFFE0E7F0), palette.gradientStart, 0.14f).copy(alpha = 0.94f)
+        androidx.compose.ui.graphics.lerp(Color(0xFF1E2A3A), palette.dayAccent, 0.20f).copy(alpha = 0.72f)
     }
 }
 
@@ -76,19 +76,19 @@ fun liquidBackgroundNeutralColor(palette: LiquidPalette, isDark: Boolean): Color
     return if (isDark) {
         androidx.compose.ui.graphics.lerp(Color(0xFF06080B), palette.gradientEnd, 0.25f)
     } else {
-        androidx.compose.ui.graphics.lerp(Color(0xFFE9EFF6), palette.gradientStart, 0.10f)
+        androidx.compose.ui.graphics.lerp(Color(0xFF13222E), palette.gradientStart, 0.26f)
     }
 }
 
 fun liquidTextPrimaryColor(isDark: Boolean): Color {
-    return if (isDark) DarkTextPrimary else Color(0xFF0F141C)
+    return DarkTextPrimary
 }
 
 fun liquidTextSecondaryColor(palette: LiquidPalette, isDark: Boolean): Color {
     return if (isDark) {
-        Color.White.copy(alpha = 0.80f)
+        Color.White.copy(alpha = 0.82f)
     } else {
-        androidx.compose.ui.graphics.lerp(Color(0xFF2D3644), palette.gradientStart, 0.08f)
+        Color.White.copy(alpha = 0.88f)
     }
 }
 
@@ -191,7 +191,7 @@ object LiquidTheme {
         get() = if (isDark) {
             Color.White.copy(alpha = 0.14f)
         } else {
-            Color(0xFF1C2430).copy(alpha = 0.16f)
+            Color.White.copy(alpha = 0.20f)
         }
 
     val textPrimary: Color
@@ -290,8 +290,9 @@ fun GymTheme(
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
             val insetsController = WindowCompat.getInsetsController(window, view)
-            insetsController.isAppearanceLightStatusBars = !isDark
-            insetsController.isAppearanceLightNavigationBars = !isDark
+            // پس‌زمینه گیاهی هر دو حالت روز و شب غنی و پررنگ است؛ آیکون‌های سفید استاتوس‌بار خوانایی کامل دارند.
+            insetsController.isAppearanceLightStatusBars = false
+            insetsController.isAppearanceLightNavigationBars = false
         }
     }
 

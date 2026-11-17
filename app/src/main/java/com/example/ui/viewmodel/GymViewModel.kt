@@ -17,19 +17,6 @@ import java.io.File
 
 class GymViewModel(application: Application) : AndroidViewModel(application) {
 
-    /**
-     * فقط تنظیمات ظاهری و وضعیت آنبوردینگ پیش‌بارگذاری می‌شود تا در فریم اول تم/آنبوردینگ پرش نداشته باشد؛
-     * سایر لیست‌های دیتابیس به‌صورت Eagerly و غیرمسدودکننده روی ترد IO بارگذاری می‌شوند.
-     */
-    private fun <T> Flow<T>.stateInSettingsPreloaded(default: T): StateFlow<T> {
-        val initial = try {
-            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) { this@stateInSettingsPreloaded.first() }
-        } catch (_: Exception) {
-            default
-        }
-        return stateIn(viewModelScope, SharingStarted.Eagerly, initial)
-    }
-
     private fun <T> Flow<T>.stateInEagerly(default: T): StateFlow<T> {
         return stateIn(viewModelScope, SharingStarted.Eagerly, default)
     }
@@ -38,7 +25,12 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = UserPreferences(application)
     val repository = GymRepository(application, db, prefs)
 
-    val userSettings = repository.userSettings.stateInSettingsPreloaded(UserSettings())
+    val userSettingsLoaded: StateFlow<UserSettings?> = repository.userSettings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    val userSettings: StateFlow<UserSettings> = userSettingsLoaded
+        .map { it ?: UserSettings() }
+        .stateInEagerly(UserSettings())
 
     val allPlans = repository.allPlans.stateInEagerly(emptyList())
 

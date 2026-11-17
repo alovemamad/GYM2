@@ -66,7 +66,7 @@ object LiquidPalettes {
     val SPORT_RED = LiquidPalette(
         id = "SPORT_RED",
         persianName = "اسپورت قرمز و مشکی",
-        dayAccent = Color(0xFFD90D3C),
+        dayAccent = Color(0xFFFF6682),
         nightAccent = Color(0xFFFF3355),
         gradientStart = Color(0xFFE5123F),
         gradientEnd = Color(0xFF14060A)
@@ -75,7 +75,7 @@ object LiquidPalettes {
     val GOLD_CARBON = LiquidPalette(
         id = "GOLD_CARBON",
         persianName = "طلایی و کربن",
-        dayAccent = Color(0xFFB86E00),
+        dayAccent = Color(0xFFFFCA45),
         nightAccent = Color(0xFFFFB020),
         gradientStart = Color(0xFFFFB020),
         gradientEnd = Color(0xFF1A1203)
@@ -84,7 +84,7 @@ object LiquidPalettes {
     val OCEAN = LiquidPalette(
         id = "OCEAN",
         persianName = "اقیانوس آبی",
-        dayAccent = Color(0xFF0663C7),
+        dayAccent = Color(0xFF66B8FF),
         nightAccent = Color(0xFF3B9BFF),
         gradientStart = Color(0xFF1E90FF),
         gradientEnd = Color(0xFF021B3A)
@@ -93,7 +93,7 @@ object LiquidPalettes {
     val EMERALD = LiquidPalette(
         id = "EMERALD",
         persianName = "زمردی ورزشی",
-        dayAccent = Color(0xFF0B8045),
+        dayAccent = Color(0xFF47E89E),
         nightAccent = Color(0xFF34D17F),
         gradientStart = Color(0xFF19C37D),
         gradientEnd = Color(0xFF03281A)
@@ -102,7 +102,7 @@ object LiquidPalettes {
     val SUNSET = LiquidPalette(
         id = "SUNSET",
         persianName = "غروب آتشین",
-        dayAccent = Color(0xFFD44800),
+        dayAccent = Color(0xFFFF9654),
         nightAccent = Color(0xFFFF7A33),
         gradientStart = Color(0xFFFF8A2B),
         gradientEnd = Color(0xFF8A1FA8)
@@ -111,7 +111,7 @@ object LiquidPalettes {
     val VIOLET = LiquidPalette(
         id = "VIOLET",
         persianName = "بنفش نئون",
-        dayAccent = Color(0xFF6D28D9),
+        dayAccent = Color(0xFFC2A8FF),
         nightAccent = Color(0xFFA78BFA),
         gradientStart = Color(0xFF8B5CF6),
         gradientEnd = Color(0xFF1E1250)
@@ -120,7 +120,7 @@ object LiquidPalettes {
     val ROSE = LiquidPalette(
         id = "ROSE",
         persianName = "رز پینک",
-        dayAccent = Color(0xFFC8146A),
+        dayAccent = Color(0xFFFF75BA),
         nightAccent = Color(0xFFFF4D9D),
         gradientStart = Color(0xFFFF4D9D),
         gradientEnd = Color(0xFF3A0A2A)
@@ -129,7 +129,7 @@ object LiquidPalettes {
     val CYBER = LiquidPalette(
         id = "CYBER",
         persianName = "سایبرپانک",
-        dayAccent = Color(0xFF007E99),
+        dayAccent = Color(0xFF47EEFF),
         nightAccent = Color(0xFF22E6FF),
         gradientStart = Color(0xFF00E5FF),
         gradientEnd = Color(0xFFFF2BD6)
