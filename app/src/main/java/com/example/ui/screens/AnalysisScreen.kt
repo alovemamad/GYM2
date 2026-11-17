@@ -35,13 +35,17 @@ import com.example.ui.theme.*
 import com.example.util.JalaliCalendar
 import com.example.util.PersianNumberHelper
 
-// ایمپورت‌های مورد نیاز برای نمودار و رنگ‌ها
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.graphics.toArgb // 👈 این خط اضافه شد
 
 @Composable
 fun AnalysisScreen(
@@ -55,6 +59,7 @@ fun AnalysisScreen(
     var showAddMeasurementDialog by remember { mutableStateOf(false) }
 
     val latest = allMeasurements.maxByOrNull { it.timestamp }
+    val orderedMeasurements = remember(allMeasurements) { allMeasurements.sortedBy { it.date } }
     val currentWeight = latest?.weightKg ?: userSettings.weightKg
     val currentHeight = latest?.heightCm ?: userSettings.heightCm
 
@@ -468,34 +473,40 @@ fun AnalysisScreen(
             }
 
             2 -> {
-                // Tab 2: Weight trend, BMI trend, custom chart (Y axis selectable)
+                // Tab 2: Weight trend, BMI trend, custom chart (chronological across all recorded days)
                 item {
-                    val weightPoints = allMeasurements.reversed().mapNotNull { it.weightKg }
+                    val weightPoints = remember(orderedMeasurements) {
+                        orderedMeasurements.mapNotNull { m ->
+                            m.weightKg?.let { w -> ChartDataBuilder.toChartPoint(m.date, w) }
+                        }
+                    }
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                         LiquidChartCard(
                             title = "روند وزن",
                             unit = userSettings.weightUnit,
-                            values = weightPoints,
+                            points = weightPoints,
                             lineColor = LiquidTheme.accentColor,
-                            emptyMessage = "حداقل ۲ بار ثبت وزن برای رسم نمودار نیاز است"
+                            emptyMessage = "حداقل ۲ روز ثبت وزن برای رسم نمودار نیاز است"
                         )
                     }
                 }
 
                 item {
                     val userH = userSettings.heightCm
-                    val bmiPoints = if (userH != null && userH > 0) {
-                        allMeasurements.reversed().mapNotNull { m ->
+                    val bmiPoints = remember(orderedMeasurements, userH) {
+                        orderedMeasurements.mapNotNull { m ->
                             val w = m.weightKg ?: return@mapNotNull null
-                            val hM = (m.heightCm ?: userH) / 100.0
-                            w / (hM * hM)
+                            val hVal = m.heightCm ?: userH ?: return@mapNotNull null
+                            if (hVal <= 0.0) return@mapNotNull null
+                            val hM = hVal / 100.0
+                            ChartDataBuilder.toChartPoint(m.date, w / (hM * hM))
                         }
-                    } else emptyList()
+                    }
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                         LiquidChartCard(
                             title = "روند BMI",
                             unit = "BMI",
-                            values = bmiPoints,
+                            points = bmiPoints,
                             lineColor = SemanticSuccess,
                             emptyMessage = "برای نمایش روند BMI قد و وزن را ثبت کنید"
                         )
@@ -506,12 +517,15 @@ fun AnalysisScreen(
                     var selectedYIndex by remember { mutableIntStateOf(0) }
                     val yLabels = listOf("وزن", "دور کمر", "دور بازو", "دور سینه")
                     val yUnits = listOf(userSettings.weightUnit, "cm", "cm", "cm")
-                    val customPoints = allMeasurements.reversed().mapNotNull { m ->
-                        when (selectedYIndex) {
-                            1 -> m.waistCm
-                            2 -> m.armsCm
-                            3 -> m.chestCm
-                            else -> m.weightKg
+                    val customPoints = remember(orderedMeasurements, selectedYIndex) {
+                        orderedMeasurements.mapNotNull { m ->
+                            val rawVal = when (selectedYIndex) {
+                                1 -> m.waistCm
+                                2 -> m.armsCm
+                                3 -> m.chestCm
+                                else -> m.weightKg
+                            }
+                            rawVal?.let { v -> ChartDataBuilder.toChartPoint(m.date, v) }
                         }
                     }
                     Column(
@@ -526,7 +540,7 @@ fun AnalysisScreen(
                         LiquidChartCard(
                             title = "نمودار سفارشی: ${yLabels[selectedYIndex]}",
                             unit = yUnits[selectedYIndex],
-                            values = customPoints,
+                            points = customPoints,
                             lineColor = SemanticWarning,
                             emptyMessage = "داده کافی برای این متغیر ثبت نشده است"
                         )
@@ -538,7 +552,18 @@ fun AnalysisScreen(
 
     // Add Measurement Dialog
     if (showAddMeasurementDialog) {
-        var date by remember { mutableStateOf(JalaliCalendar.getTodayGregorian()) }
+        val todayStr = remember { JalaliCalendar.getTodayGregorian() }
+        val pastDays = remember {
+            val cal = java.util.Calendar.getInstance()
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            (0..13).map { offset ->
+                val c = (cal.clone() as java.util.Calendar).apply {
+                    add(java.util.Calendar.DAY_OF_YEAR, -offset)
+                }
+                sdf.format(c.time)
+            }
+        }
+        var date by remember { mutableStateOf(todayStr) }
         var weightStr by remember { mutableStateOf(userSettings.weightKg?.toString() ?: "") }
         var heightStr by remember { mutableStateOf(userSettings.heightCm?.toString() ?: "") }
         var waistStr by remember { mutableStateOf("") }
@@ -550,7 +575,7 @@ fun AnalysisScreen(
         LiquidAlertDialog(
             onDismissRequest = { showAddMeasurementDialog = false },
             title = "ثبت سایز و وزن جدید",
-            message = "ابعاد و وزن جدید خود را وارد کنید:",
+            message = "تاریخ و ابعاد بدنی خود را وارد کنید:",
             confirmText = "ذخیره در سوابق",
             dismissText = "انصراف",
             onConfirm = {
@@ -569,6 +594,42 @@ fun AnalysisScreen(
             },
             content = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "تاریخ ثبت: ${JalaliCalendar.formatGregorianToPersian(date)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = LiquidTheme.accentColor
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(pastDays) { gDate ->
+                            val isSel = date == gDate
+                            val jDate = JalaliCalendar.gregorianToJalali(gDate)
+                            val label = if (gDate == todayStr) "امروز" else PersianNumberHelper.toPersianDigits("${jDate.month}/${jDate.day}")
+                            Surface(
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .liquidTapEffect { date = gDate },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSel) LiquidTheme.onAccent else LiquidTheme.textPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         LiquidInputField(
                             value = weightStr,
@@ -626,28 +687,70 @@ fun AnalysisScreen(
 }
 
 
+data class ChartDataPoint(
+    val dateGregorian: String,
+    val shortDateLabel: String,
+    val fullDateLabel: String,
+    val value: Double
+)
+
+object ChartDataBuilder {
+    fun toChartPoint(dateGregorian: String, value: Double): ChartDataPoint {
+        val jDate = JalaliCalendar.gregorianToJalali(dateGregorian)
+        return ChartDataPoint(
+            dateGregorian = dateGregorian,
+            shortDateLabel = PersianNumberHelper.toPersianDigits("${jDate.month}/${jDate.day}"),
+            fullDateLabel = jDate.toFormattedString(withMonthName = true),
+            value = value
+        )
+    }
+}
+
 @Composable
 fun LiquidChartCard(
     title: String,
     unit: String,
-    values: List<Double>,
+    points: List<ChartDataPoint>,
     lineColor: Color,
     emptyMessage: String,
     modifier: Modifier = Modifier
 ) {
+    var selectedIndex by remember(points) { mutableStateOf<Int?>(null) }
+
     SolidGroupedCard(modifier = modifier) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = LiquidTheme.textSecondary
-            )
-            if (values.size < 2) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = LiquidTheme.textSecondary
+                )
+                if (points.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = lineColor.copy(alpha = 0.14f)
+                    ) {
+                        Text(
+                            text = "${PersianNumberHelper.toPersianDigits(points.size)} روز ثبت‌شده",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = lineColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            if (points.size < 2) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -661,29 +764,99 @@ fun LiquidChartCard(
                     )
                 }
             } else {
-                val latestValue = values.last()
-                val minV = values.minOrNull() ?: 0.0
-                val maxV = values.maxOrNull() ?: 0.0
-                Text(
-                    text = "${PersianNumberHelper.formatDecimal(latestValue)} $unit",
-                    style = MaterialTheme.typography.displayMedium.copy(fontSize = 36.sp),
-                    fontWeight = FontWeight.ExtraBold,
-                    color = lineColor
-                )
+                val activePoint = selectedIndex?.let { points.getOrNull(it) } ?: points.last()
+                val minV = points.minOf { it.value }
+                val maxV = points.maxOf { it.value }
+                val diff = points.last().value - points.first().value
+                val diffPrefix = if (diff > 0) "+" else ""
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column {
+                        Text(
+                            text = "${PersianNumberHelper.formatDecimal(activePoint.value)} $unit",
+                            style = MaterialTheme.typography.displayMedium.copy(fontSize = 34.sp),
+                            fontWeight = FontWeight.ExtraBold,
+                            color = lineColor
+                        )
+                        Text(
+                            text = if (selectedIndex != null) {
+                                "ثبت شده در ${activePoint.fullDateLabel}"
+                            } else {
+                                "آخرین ثبت (${activePoint.fullDateLabel})"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LiquidTheme.textSecondary
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = LiquidTheme.surfaceElevated
+                    ) {
+                        Text(
+                            text = "تغییر کل: $diffPrefix${PersianNumberHelper.formatDecimal(diff)} $unit",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = LiquidTheme.textPrimary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
                 Text(
                     text = "کمترین: ${PersianNumberHelper.formatDecimal(minV)}  |  بیشترین: ${PersianNumberHelper.formatDecimal(maxV)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = LiquidTheme.textSecondary
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+
                 LiquidLineChart(
-                    values = values,
+                    points = points,
+                    selectedIndex = selectedIndex,
+                    onSelectPoint = { idx ->
+                        selectedIndex = if (selectedIndex == idx) null else idx
+                    },
                     lineColor = lineColor,
                     gridColor = LiquidTheme.dividerColor,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
+                        .height(195.dp)
                 )
+
+                // ردیف تمام روزهای ثبت‌شده تا کاربر هر چند روز که ثبت کرده را مستقیماً ببیند و انتخاب کند
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(points.indices.toList().reversed()) { idx ->
+                        val p = points[idx]
+                        val isSel = selectedIndex == idx || (selectedIndex == null && idx == points.lastIndex)
+                        Surface(
+                            modifier = Modifier
+                                .height(36.dp)
+                                .liquidTapEffect {
+                                    selectedIndex = if (selectedIndex == idx) null else idx
+                                },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSel) lineColor.copy(alpha = 0.20f) else LiquidTheme.surfaceElevated
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${p.shortDateLabel}: ${PersianNumberHelper.formatDecimal(p.value)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSel) lineColor else LiquidTheme.textPrimary
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -691,98 +864,193 @@ fun LiquidChartCard(
 
 @Composable
 fun LiquidLineChart(
-    values: List<Double>,
+    points: List<ChartDataPoint>,
+    selectedIndex: Int?,
+    onSelectPoint: (Int) -> Unit,
     lineColor: Color,
     gridColor: Color,
     modifier: Modifier = Modifier
 ) {
     // در صفحه RTL، زمان از راست به چپ جلو می‌رود (جدیدترین مقدار سمت چپ)
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val labelColor = LiquidTheme.textSecondary
+    val primaryTextColor = LiquidTheme.textPrimary
+    val secondaryTextColor = LiquidTheme.textSecondary
     val textMeasurer = rememberTextMeasurer()
-    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = labelColor)
+    val valueLabelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold
+    )
+    val dateLabelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Medium
+    )
 
-    Canvas(modifier = modifier) {
-        if (values.size < 2) return@Canvas
+    val scrollState = rememberScrollState()
+    LaunchedEffect(points.size, scrollState.maxValue) {
+        if (points.size > 6 && scrollState.maxValue > 0) {
+            scrollState.scrollTo(scrollState.maxValue)
+        }
+    }
 
-        val dataMin = values.minOrNull() ?: 0.0
-        val dataMax = values.maxOrNull() ?: 1.0
-        // حداقل بازه نمایش: نوسان‌های خیلی کوچک (مثلاً ۰٫۲ کیلو) بزرگ‌نمایی نشود
-        val minSpan = maxOf(kotlin.math.abs(dataMax) * 0.06, 0.5)
-        val span = maxOf(dataMax - dataMin, minSpan)
-        val center = (dataMax + dataMin) / 2.0
-        val minVal = center - span / 2.0 - span * 0.08
-        val maxVal = center + span / 2.0 + span * 0.08
-        val range = (maxVal - minVal).coerceAtLeast(0.0001)
+    BoxWithConstraints(modifier = modifier) {
+        val minPointSpacing = 58.dp
+        val contentWidth = maxOf(maxWidth, minPointSpacing * points.size.coerceAtLeast(2))
+        val density = LocalDensity.current
+        val contentWidthPx = with(density) { contentWidth.toPx() }
 
-        val padY = 12.dp.toPx()
-        val chartH = size.height - padY * 2
-        val stepX = size.width / (values.size - 1)
-
-        fun xAt(index: Int): Float = if (isRtl) size.width - index * stepX else index * stepX
-
-        // خطوط راهنما + برچسب عددی محور Y (بالا، وسط، پایین)
-        for (i in 0..2) {
-            val gy = padY + chartH * i / 2f
-            drawLine(
-                color = gridColor,
-                start = Offset(0f, gy),
-                end = Offset(size.width, gy),
-                strokeWidth = 1.dp.toPx()
-            )
-            val labelValue = maxVal - (maxVal - minVal) * i / 2.0
-            val layout = textMeasurer.measure(
-                text = PersianNumberHelper.formatDecimal(labelValue),
-                style = labelStyle
-            )
-            val lx = if (isRtl) size.width - layout.size.width else 0f
-            // استفاده از drawIntoCanvas و nativeCanvas برای رندر متن روی Canvas
-            drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawText(
-                    PersianNumberHelper.formatDecimal(labelValue),
-                    lx,
-                    (gy - layout.size.height - 2.dp.toPx()).coerceAtLeast(0f),
-                    android.graphics.Paint().apply {
-                        color = labelColor.toArgb()
-                        textSize = labelStyle.fontSize.toPx()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .horizontalScroll(scrollState)
+        ) {
+            Canvas(
+                modifier = Modifier
+                    .width(contentWidth)
+                    .fillMaxHeight()
+                    .pointerInput(points, isRtl, contentWidthPx) {
+                        detectTapGestures { tapOffset ->
+                            if (points.size < 2) return@detectTapGestures
+                            val sidePad = 28.dp.toPx()
+                            val usableW = (size.width - sidePad * 2).coerceAtLeast(1f)
+                            val stepX = usableW / (points.size - 1)
+                            var bestIdx = 0
+                            var bestDist = Float.MAX_VALUE
+                            points.indices.forEach { idx ->
+                                val px = if (isRtl) size.width - sidePad - idx * stepX else sidePad + idx * stepX
+                                val dist = kotlin.math.abs(tapOffset.x - px)
+                                if (dist < bestDist) {
+                                    bestDist = dist
+                                    bestIdx = idx
+                                }
+                            }
+                            if (bestDist <= 42.dp.toPx()) {
+                                onSelectPoint(bestIdx)
+                            }
+                        }
                     }
+            ) {
+                if (points.size < 2) return@Canvas
+
+                val dataMin = points.minOf { it.value }
+                val dataMax = points.maxOf { it.value }
+                val minSpan = maxOf(kotlin.math.abs(dataMax) * 0.06, 0.5)
+                val span = maxOf(dataMax - dataMin, minSpan)
+                val center = (dataMax + dataMin) / 2.0
+                val minVal = center - span / 2.0 - span * 0.10
+                val maxVal = center + span / 2.0 + span * 0.10
+                val range = (maxVal - minVal).coerceAtLeast(0.0001)
+
+                val topPad = 26.dp.toPx()
+                val bottomPad = 28.dp.toPx()
+                val sidePad = 28.dp.toPx()
+                val chartH = (size.height - topPad - bottomPad).coerceAtLeast(1f)
+                val usableW = (size.width - sidePad * 2).coerceAtLeast(1f)
+                val stepX = usableW / (points.size - 1)
+
+                fun xAt(index: Int): Float = if (isRtl) size.width - sidePad - index * stepX else sidePad + index * stepX
+
+                // خطوط راهنمای افقی (بالا، وسط، پایین)
+                for (i in 0..2) {
+                    val gy = topPad + chartH * i / 2f
+                    drawLine(
+                        color = gridColor,
+                        start = Offset(0f, gy),
+                        end = Offset(size.width, gy),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+
+                val coords = points.mapIndexed { index, pt ->
+                    val y = topPad + chartH - (((pt.value - minVal) / range) * chartH).toFloat()
+                    Offset(xAt(index), y)
+                }
+
+                val linePath = Path()
+                coords.forEachIndexed { index, pt ->
+                    if (index == 0) linePath.moveTo(pt.x, pt.y) else linePath.lineTo(pt.x, pt.y)
+                }
+
+                val fillPath = Path().apply {
+                    addPath(linePath)
+                    lineTo(coords.last().x, topPad + chartH)
+                    lineTo(coords.first().x, topPad + chartH)
+                    close()
+                }
+                drawPath(
+                    path = fillPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(lineColor.copy(alpha = 0.24f), Color.Transparent),
+                        startY = topPad,
+                        endY = topPad + chartH
+                    )
                 )
+                drawPath(
+                    path = linePath,
+                    color = lineColor,
+                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                )
+
+                // خط عمودی نشانگر برای نقطه انتخاب‌شده
+                val highlightedIdx = selectedIndex ?: points.lastIndex
+                val hiPt = coords[highlightedIdx]
+                drawLine(
+                    color = lineColor.copy(alpha = 0.35f),
+                    start = Offset(hiPt.x, topPad),
+                    end = Offset(hiPt.x, topPad + chartH),
+                    strokeWidth = 1.5.dp.toPx()
+                )
+
+                // رسم نقاط، برچسب عددی هر روز و تاریخ جلالی محور افقی
+                coords.forEachIndexed { index, pt ->
+                    val isHighlighted = index == highlightedIdx
+                    if (isHighlighted) {
+                        drawCircle(
+                            color = lineColor.copy(alpha = 0.24f),
+                            radius = 10.dp.toPx(),
+                            center = pt
+                        )
+                    }
+                    drawCircle(
+                        color = lineColor,
+                        radius = if (isHighlighted) 5.5.dp.toPx() else 4.dp.toPx(),
+                        center = pt
+                    )
+
+                    // مقدار عددی دقیق بالای (یا پایینِ) هر نقطه از تمام روزها
+                    val valText = PersianNumberHelper.formatDecimal(points[index].value)
+                    val valLayout = textMeasurer.measure(
+                        text = valText,
+                        style = valueLabelStyle.copy(
+                            color = if (isHighlighted) lineColor else primaryTextColor
+                        )
+                    )
+                    val preferredAboveY = pt.y - valLayout.size.height - 6.dp.toPx()
+                    val valY = if (preferredAboveY >= 2.dp.toPx()) {
+                        preferredAboveY
+                    } else {
+                        (pt.y + 8.dp.toPx()).coerceAtMost(topPad + chartH - valLayout.size.height)
+                    }
+                    val valX = (pt.x - valLayout.size.width / 2f).coerceIn(2f, (size.width - valLayout.size.width - 2f).coerceAtLeast(2f))
+                    drawText(
+                        textLayoutResult = valLayout,
+                        topLeft = Offset(valX, valY)
+                    )
+
+                    // تاریخ هر روز روی محور افقی پایین نمودار
+                    val dateLayout = textMeasurer.measure(
+                        text = points[index].shortDateLabel,
+                        style = dateLabelStyle.copy(
+                            color = if (isHighlighted) lineColor else secondaryTextColor
+                        )
+                    )
+                    val dateX = (pt.x - dateLayout.size.width / 2f).coerceIn(2f, (size.width - dateLayout.size.width - 2f).coerceAtLeast(2f))
+                    val dateY = topPad + chartH + 6.dp.toPx()
+                    drawText(
+                        textLayoutResult = dateLayout,
+                        topLeft = Offset(dateX, dateY)
+                    )
+                }
             }
-        }
-
-        val linePath = Path()
-        val points = values.mapIndexed { index, v ->
-            val y = padY + chartH - (((v - minVal) / range) * chartH).toFloat()
-            Offset(xAt(index), y)
-        }
-        points.forEachIndexed { index, pt ->
-            if (index == 0) linePath.moveTo(pt.x, pt.y) else linePath.lineTo(pt.x, pt.y)
-        }
-
-        val fillPath = Path().apply {
-            addPath(linePath)
-            lineTo(points.last().x, size.height)
-            lineTo(points.first().x, size.height)
-            close()
-        }
-        drawPath(
-            path = fillPath,
-            brush = Brush.verticalGradient(
-                colors = listOf(lineColor.copy(alpha = 0.22f), Color.Transparent)
-            )
-        )
-        drawPath(
-            path = linePath,
-            color = lineColor,
-            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-        )
-        points.forEachIndexed { index, pt ->
-            val isLast = index == points.lastIndex
-            drawCircle(
-                color = lineColor,
-                radius = if (isLast) 6.dp.toPx() else 3.5.dp.toPx(),
-                center = pt
-            )
         }
     }
 }

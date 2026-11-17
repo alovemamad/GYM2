@@ -20,6 +20,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Calendar
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
+import com.example.ui.theme.liquidBackgroundNeutralColor
+import com.example.ui.theme.liquidGlassSurfaceColor
+import com.example.ui.theme.liquidTextPrimaryColor
+import com.example.ui.theme.liquidTextSecondaryColor
+import com.example.ui.theme.wcagContrastRatio
+
 class ExampleUnitTest {
 
     @Test
@@ -155,5 +164,68 @@ class ExampleUnitTest {
         assertNotEquals(lightOcean.background, lightRed.background)
         assertNotEquals(lightOcean.surface, lightRed.surface)
         assertNotEquals(lightOcean.background, darkOcean.background)
+    }
+
+    @Test
+    fun testLightAndDarkThemeContrastAcrossAllPalettes() {
+        // Dark foliage photo pixel sample (~luminance 0.03)
+        val darkFoliageSample = Color(0xFF0E2414)
+
+        LiquidPalettes.all.forEach { palette ->
+            // 1. Light mode composited root background & frosted card must be bright and readable
+            val lightBgNeutral = liquidBackgroundNeutralColor(palette, isDark = false)
+            val lightVeil = androidx.compose.ui.graphics.lerp(lightBgNeutral, palette.gradientStart, 0.08f).copy(alpha = 0.91f)
+            val effectiveLightRoot = lightVeil.compositeOver(darkFoliageSample)
+            val lightCardTint = liquidGlassSurfaceColor(palette, isDark = false).copy(alpha = 0.78f)
+            val effectiveLightCard = lightCardTint.compositeOver(effectiveLightRoot)
+
+            assertTrue("${palette.id} Light root too dark: ${effectiveLightRoot.luminance()}", effectiveLightRoot.luminance() >= 0.45f)
+            assertTrue("${palette.id} Light card too dark: ${effectiveLightCard.luminance()}", effectiveLightCard.luminance() >= 0.55f)
+
+            val lightPrimary = liquidTextPrimaryColor(isDark = false)
+            val lightSecondary = liquidTextSecondaryColor(palette, isDark = false)
+
+            assertTrue("${palette.id} Light primary on root contrast low", wcagContrastRatio(lightPrimary, effectiveLightRoot) >= 7.0f)
+            assertTrue("${palette.id} Light primary on card contrast low", wcagContrastRatio(lightPrimary, effectiveLightCard) >= 8.0f)
+            assertTrue("${palette.id} Light secondary on root contrast low", wcagContrastRatio(lightSecondary, effectiveLightRoot) >= 4.5f)
+            assertTrue("${palette.id} Light secondary on card contrast low", wcagContrastRatio(lightSecondary, effectiveLightCard) >= 5.0f)
+            assertTrue("${palette.id} Day accent on card contrast low", wcagContrastRatio(palette.dayAccent, effectiveLightCard) >= 3.2f)
+
+            // 2. Dark mode must keep high white-on-dark contrast
+            val darkRoot = liquidBackgroundNeutralColor(palette, isDark = true)
+            val darkCard = liquidGlassSurfaceColor(palette, isDark = true).copy(alpha = 0.44f).compositeOver(darkRoot)
+            val darkPrimary = liquidTextPrimaryColor(isDark = true)
+            val darkSecondary = liquidTextSecondaryColor(palette, isDark = true)
+
+            assertTrue("${palette.id} Dark primary on card contrast low", wcagContrastRatio(darkPrimary, darkCard) >= 10.0f)
+            assertTrue("${palette.id} Dark secondary on card contrast low", wcagContrastRatio(darkSecondary, darkCard) >= 7.0f)
+        }
+    }
+
+    @Test
+    fun testMultiDayChartPointsPreserveAllDaysInChronologicalOrder() {
+        val sampleMeasurements = listOf(
+            com.example.data.local.BodyMeasurement(date = "2026-04-05", weightKg = 81.0),
+            com.example.data.local.BodyMeasurement(date = "2026-04-01", weightKg = 82.4),
+            com.example.data.local.BodyMeasurement(date = "2026-04-03", weightKg = 81.8),
+            com.example.data.local.BodyMeasurement(date = "2026-04-02", weightKg = 82.1),
+            com.example.data.local.BodyMeasurement(date = "2026-04-04", weightKg = 81.3)
+        )
+
+        val points = sampleMeasurements
+            .filter { it.weightKg != null }
+            .sortedBy { it.date }
+            .map { com.example.ui.screens.ChartDataBuilder.toChartPoint(it.date, it.weightKg!!) }
+
+        assertEquals(5, points.size)
+        assertEquals(listOf(82.4, 82.1, 81.8, 81.3, 81.0), points.map { it.value })
+        assertEquals(
+            listOf("2026-04-01", "2026-04-02", "2026-04-03", "2026-04-04", "2026-04-05"),
+            points.map { it.dateGregorian }
+        )
+        points.forEach { pt ->
+            assertTrue(pt.shortDateLabel.contains("/"))
+            assertTrue(pt.fullDateLabel.isNotBlank())
+        }
     }
 }

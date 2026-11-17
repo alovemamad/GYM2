@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
@@ -16,10 +17,13 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * رنگ متن/آیکون خوانا روی یک پس‌زمینه: سفید یا مشکی، هرکدام کنتراست بیشتری دارد.
@@ -29,6 +33,63 @@ fun onColorFor(background: Color): Color {
     val whiteContrast = 1.05f / (l + 0.05f)
     val darkContrast = (l + 0.05f) / 0.0556f
     return if (whiteContrast >= darkContrast) Color.White else Color(0xFF111113)
+}
+
+/**
+ * نسبت کنتراست WCAG 2.1 بین رنگ رویی (با پشتیبانی از آلفا) و رنگ پس‌زمینه.
+ */
+fun wcagContrastRatio(foreground: Color, background: Color): Float {
+    val opaqueBg = background.copy(alpha = 1f)
+    val effectiveFg = if (foreground.alpha < 1f) foreground.compositeOver(opaqueBg) else foreground
+    val l1 = effectiveFg.luminance()
+    val l2 = opaqueBg.luminance()
+    val brighter = max(l1, l2)
+    val darker = min(l1, l2)
+    return (brighter + 0.05f) / (darker + 0.05f)
+}
+
+fun liquidGlassSurfaceColor(palette: LiquidPalette, isDark: Boolean): Color {
+    return if (isDark) {
+        androidx.compose.ui.graphics.lerp(Color(0xFF0B0F16), palette.gradientEnd, 0.34f)
+    } else {
+        androidx.compose.ui.graphics.lerp(Color(0xFFF3F6FA), palette.gradientStart, 0.08f)
+    }
+}
+
+fun liquidSurfaceSolidColor(palette: LiquidPalette, isDark: Boolean): Color {
+    return if (isDark) {
+        androidx.compose.ui.graphics.lerp(Color(0xFF141A22), palette.gradientEnd, 0.32f).copy(alpha = 0.84f)
+    } else {
+        androidx.compose.ui.graphics.lerp(Color(0xFFEEF3F8), palette.gradientStart, 0.10f).copy(alpha = 0.94f)
+    }
+}
+
+fun liquidSurfaceElevatedColor(palette: LiquidPalette, isDark: Boolean): Color {
+    return if (isDark) {
+        androidx.compose.ui.graphics.lerp(Color(0xFF1E2530), palette.nightAccent, 0.18f).copy(alpha = 0.90f)
+    } else {
+        androidx.compose.ui.graphics.lerp(Color(0xFFE0E7F0), palette.gradientStart, 0.14f).copy(alpha = 0.94f)
+    }
+}
+
+fun liquidBackgroundNeutralColor(palette: LiquidPalette, isDark: Boolean): Color {
+    return if (isDark) {
+        androidx.compose.ui.graphics.lerp(Color(0xFF06080B), palette.gradientEnd, 0.25f)
+    } else {
+        androidx.compose.ui.graphics.lerp(Color(0xFFE9EFF6), palette.gradientStart, 0.10f)
+    }
+}
+
+fun liquidTextPrimaryColor(isDark: Boolean): Color {
+    return if (isDark) DarkTextPrimary else Color(0xFF0F141C)
+}
+
+fun liquidTextSecondaryColor(palette: LiquidPalette, isDark: Boolean): Color {
+    return if (isDark) {
+        Color.White.copy(alpha = 0.80f)
+    } else {
+        androidx.compose.ui.graphics.lerp(Color(0xFF2D3644), palette.gradientStart, 0.08f)
+    }
 }
 
 /** چرخاندن رنگ‌مایه (hue) برای ساخت طیف هم‌خانواده از رنگ اصلی پالت. */
@@ -107,38 +168,22 @@ object LiquidTheme {
     val glassSurfaceColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) {
-            androidx.compose.ui.graphics.lerp(Color(0xFF0A0E14), palette.gradientEnd, 0.34f)
-        } else {
-            androidx.compose.ui.graphics.lerp(Color(0xFFEAF0F6), palette.gradientStart, 0.16f)
-        }
+        get() = liquidGlassSurfaceColor(palette, isDark)
 
     val surfaceSolid: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) {
-            androidx.compose.ui.graphics.lerp(Color(0xFF141920), palette.gradientEnd, 0.32f).copy(alpha = 0.78f)
-        } else {
-            androidx.compose.ui.graphics.lerp(Color(0xFFE3EAF2), palette.gradientStart, 0.18f).copy(alpha = 0.84f)
-        }
+        get() = liquidSurfaceSolidColor(palette, isDark)
 
     val surfaceElevated: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) {
-            accentColor.copy(alpha = 0.18f)
-        } else {
-            accentColor.copy(alpha = 0.15f)
-        }
+        get() = liquidSurfaceElevatedColor(palette, isDark)
 
     val backgroundNeutral: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) {
-            androidx.compose.ui.graphics.lerp(Color(0xFF06080B), palette.gradientEnd, 0.25f)
-        } else {
-            androidx.compose.ui.graphics.lerp(Color(0xFFE2E8F0), palette.gradientStart, 0.12f)
-        }
+        get() = liquidBackgroundNeutralColor(palette, isDark)
 
     val dividerColor: Color
         @Composable
@@ -146,29 +191,25 @@ object LiquidTheme {
         get() = if (isDark) {
             Color.White.copy(alpha = 0.14f)
         } else {
-            androidx.compose.ui.graphics.lerp(Color(0xFF1D2430), palette.gradientEnd, 0.25f).copy(alpha = 0.14f)
+            Color(0xFF1C2430).copy(alpha = 0.16f)
         }
 
     val textPrimary: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) DarkTextPrimary else Color(0xFF12161E)
+        get() = liquidTextPrimaryColor(isDark)
 
     val textSecondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) {
-            Color.White.copy(alpha = 0.78f)
-        } else {
-            androidx.compose.ui.graphics.lerp(Color(0xFF39424E), palette.gradientEnd, 0.18f)
-        }
+        get() = liquidTextSecondaryColor(palette, isDark)
 }
 
 fun createLiquidColorScheme(palette: LiquidPalette, isDark: Boolean): ColorScheme {
     val accent = palette.getAccent(isDark)
     val onAccent = onColorFor(accent)
+    val bg = liquidBackgroundNeutralColor(palette, isDark)
     return if (isDark) {
-        val bg = androidx.compose.ui.graphics.lerp(Color(0xFF06080B), palette.gradientEnd, 0.25f)
         val card = androidx.compose.ui.graphics.lerp(Color(0xFF14181F), palette.gradientEnd, 0.26f)
         val elevated = androidx.compose.ui.graphics.lerp(Color(0xFF1E242E), palette.gradientEnd, 0.30f)
         darkColorScheme(
@@ -189,9 +230,10 @@ fun createLiquidColorScheme(palette: LiquidPalette, isDark: Boolean): ColorSchem
             onError = Color.White
         )
     } else {
-        val bg = androidx.compose.ui.graphics.lerp(Color(0xFFE2E8F0), palette.gradientStart, 0.12f)
-        val card = androidx.compose.ui.graphics.lerp(Color(0xFFEEF2F6), palette.gradientStart, 0.10f)
-        val elevated = androidx.compose.ui.graphics.lerp(Color(0xFFDFE6EE), palette.gradientStart, 0.14f)
+        val card = liquidGlassSurfaceColor(palette, isDark = false)
+        val elevated = androidx.compose.ui.graphics.lerp(Color(0xFFDCE4EE), palette.gradientStart, 0.16f)
+        val inkPrimary = liquidTextPrimaryColor(isDark = false)
+        val inkSecondary = liquidTextSecondaryColor(palette, isDark = false)
         lightColorScheme(
             primary = accent,
             onPrimary = onAccent,
@@ -200,11 +242,11 @@ fun createLiquidColorScheme(palette: LiquidPalette, isDark: Boolean): ColorSchem
             secondary = accent,
             onSecondary = onAccent,
             background = bg,
-            onBackground = Color(0xFF12161E),
+            onBackground = inkPrimary,
             surface = card,
-            onSurface = Color(0xFF12161E),
+            onSurface = inkPrimary,
             surfaceVariant = elevated,
-            onSurfaceVariant = Color(0xFF39424E),
+            onSurfaceVariant = inkSecondary,
             outline = LightDivider,
             error = SemanticError,
             onError = Color.White
@@ -239,6 +281,7 @@ fun GymTheme(
 
     val palette = LiquidPalettes.fromId(accentPalette)
     val colorScheme = createLiquidColorScheme(palette, isDark)
+    val defaultInk = liquidTextPrimaryColor(isDark)
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -259,8 +302,11 @@ fun GymTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = AppTypography,
-            shapes = Shapes(extraSmall = RoundedCornerShape(16.dp)),
-            content = content // 👈 اینجا اصلاح شد
-        )
+            shapes = Shapes(extraSmall = RoundedCornerShape(16.dp))
+        ) {
+            CompositionLocalProvider(LocalContentColor provides defaultInk) {
+                content()
+            }
+        }
     }
 }

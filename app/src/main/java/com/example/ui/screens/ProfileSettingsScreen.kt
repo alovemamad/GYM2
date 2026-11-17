@@ -1501,7 +1501,12 @@ private fun AppUpdateDialog(
                 Modifier
                     .width(330.dp)
                     .clickable(enabled = false) {}
-                    .liquidGlass(shape = RoundedCornerShape(26.dp), elevation = 16.dp)
+                    .liquidGlass(
+                        hazeState = null,
+                        shape = RoundedCornerShape(26.dp),
+                        tintAlpha = if (LiquidTheme.isDark) 0.90f else 0.95f,
+                        elevation = 16.dp
+                    )
             ) {
                 Column(
                     Modifier.fillMaxWidth(),
@@ -1805,6 +1810,7 @@ private fun PaletteCard(
             modifier = Modifier
                 .fillMaxSize()
                 .background(palette.getCardGradient())
+                .background(Color.Black.copy(alpha = 0.24f))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {

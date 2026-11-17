@@ -50,9 +50,10 @@ import com.example.util.PersianNumberHelper
 
 // Haze (iOS blur integration)
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
-import dev.chrisbanes.haze.HazeStyle
 
 // CompositionLocal for HazeState across the entire app
 val LocalHazeState = compositionLocalOf<HazeState?> { null }
@@ -87,23 +88,26 @@ fun LiquidGlassRoot(
         label = "bg_palette_accent"
     )
 
-    val baseTint = LiquidTheme.backgroundNeutral
+    val baseTint by animateColorAsState(
+        targetValue = LiquidTheme.backgroundNeutral,
+        animationSpec = tween(durationMillis = 350),
+        label = "bg_base_tint"
+    )
     val atmosphericBrush = remember(isDark, baseTint, paletteStart, paletteEnd, paletteAccent) {
         if (isDark) {
             Brush.verticalGradient(
                 colors = listOf(
                     paletteEnd.copy(alpha = 0.72f),
                     baseTint.copy(alpha = 0.62f),
-                    paletteAccent.copy(alpha = 0.26f)
+                    paletteAccent.copy(alpha = 0.24f)
                 )
             )
         } else {
+            val topWash = androidx.compose.ui.graphics.lerp(baseTint, paletteStart, 0.08f).copy(alpha = 0.92f)
+            val midWash = androidx.compose.ui.graphics.lerp(Color(0xFFEBF0F6), paletteAccent, 0.10f).copy(alpha = 0.90f)
+            val botWash = androidx.compose.ui.graphics.lerp(Color(0xFFE2E9F2), paletteStart, 0.14f).copy(alpha = 0.91f)
             Brush.verticalGradient(
-                colors = listOf(
-                    baseTint.copy(alpha = 0.44f),
-                    paletteStart.copy(alpha = 0.28f),
-                    paletteEnd.copy(alpha = 0.22f)
-                )
+                colors = listOf(topWash, midWash, botWash)
             )
         }
     }
@@ -117,7 +121,7 @@ fun LiquidGlassRoot(
                 .fillMaxSize()
                 .haze(state = hazeState)
         ) {
-            // High-resolution botanical foliage background (matching Snipzy live preview)
+            // High-resolution botanical foliage background
             Image(
                 painter = painterResource(id = R.drawable.img_liquid_glass_bg),
                 contentDescription = null,
@@ -144,9 +148,9 @@ fun LiquidGlassRoot(
 }
 
 /**
- * Primary Liquid Glass modifier based on Snipzy CSS liquid glass design:
+ * Primary Liquid Glass modifier:
  * - Backdrop blur with Haze (16dp)
- * - Translucent overlay tint reactive to appearance mode & active palette (without harsh white glare in Day mode)
+ * - Translucent HazeTint reactive to appearance mode & active palette (high readability in Day mode without harsh white glare)
  * - Specular highlight gradient border tinted with active accent color
  * - Inset vertical reflection sheen
  * - Soft ambient shadow
@@ -155,9 +159,9 @@ fun LiquidGlassRoot(
 fun Modifier.liquidGlass(
     hazeState: HazeState? = LocalHazeState.current,
     shape: Shape = RoundedCornerShape(22.dp),
-    tintAlpha: Float = if (LiquidTheme.isDark) 0.34f else 0.62f,
+    tintAlpha: Float = if (LiquidTheme.isDark) 0.44f else 0.78f,
     elevation: Dp = 8.dp,
-    borderAlpha: Float = if (LiquidTheme.isDark) 0.68f else 0.72f
+    borderAlpha: Float = if (LiquidTheme.isDark) 0.68f else 0.65f
 ): Modifier {
     val isDark = LiquidTheme.isDark
     val accent = LiquidTheme.accentColor
@@ -166,15 +170,18 @@ fun Modifier.liquidGlass(
     val bgColor = remember(glassBase, tintAlpha) {
         glassBase.copy(alpha = tintAlpha)
     }
+    val fallbackColor = remember(glassBase, isDark, tintAlpha) {
+        glassBase.copy(alpha = (tintAlpha + if (isDark) 0.28f else 0.14f).coerceAtMost(0.95f))
+    }
 
     // Specular border gradient: tinted glass rim without blinding white edge in Day mode
     val borderBrush = remember(isDark, accent, paletteStart, borderAlpha) {
         Brush.linearGradient(
             colors = listOf(
-                if (isDark) Color.White.copy(alpha = borderAlpha) else accent.copy(alpha = (borderAlpha * 0.58f).coerceAtMost(0.55f)),
-                accent.copy(alpha = if (isDark) 0.44f else 0.38f),
-                if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.50f),
-                paletteStart.copy(alpha = if (isDark) 0.32f else 0.28f)
+                if (isDark) Color.White.copy(alpha = borderAlpha) else accent.copy(alpha = (borderAlpha * 0.56f).coerceAtMost(0.50f)),
+                accent.copy(alpha = if (isDark) 0.44f else 0.34f),
+                if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.58f),
+                paletteStart.copy(alpha = if (isDark) 0.32f else 0.26f)
             ),
             start = Offset(0f, 0f),
             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
@@ -185,8 +192,8 @@ fun Modifier.liquidGlass(
     val innerSpecularBrush = remember(isDark, accent) {
         Brush.verticalGradient(
             colors = listOf(
-                Color.White.copy(alpha = if (isDark) 0.12f else 0.15f),
-                accent.copy(alpha = if (isDark) 0.05f else 0.06f),
+                Color.White.copy(alpha = if (isDark) 0.12f else 0.22f),
+                accent.copy(alpha = if (isDark) 0.05f else 0.04f),
                 Color.Transparent
             ),
             startY = 0f,
@@ -194,12 +201,13 @@ fun Modifier.liquidGlass(
         )
     }
 
-    val hazeStyle = remember(bgColor) {
+    val hazeStyle = remember(bgColor, fallbackColor) {
         HazeStyle(
             backgroundColor = bgColor,
-            tints = emptyList(),
+            tints = listOf(HazeTint(color = bgColor)),
             blurRadius = 16.dp,
-            noiseFactor = 0.04f
+            noiseFactor = 0.04f,
+            fallbackTint = HazeTint(color = fallbackColor)
         )
     }
 
@@ -207,8 +215,8 @@ fun Modifier.liquidGlass(
         .shadow(
             elevation = elevation,
             shape = shape,
-            spotColor = accent.copy(alpha = if (isDark) 0.28f else 0.20f),
-            ambientColor = Color.Black.copy(alpha = if (isDark) 0.20f else 0.12f)
+            spotColor = accent.copy(alpha = if (isDark) 0.28f else 0.18f),
+            ambientColor = Color.Black.copy(alpha = if (isDark) 0.20f else 0.10f)
         )
         .clip(shape)
         .then(
@@ -646,12 +654,13 @@ fun LiquidPrimaryButton(
     )
     val accent = LiquidTheme.accentColor
     val paletteStart = LiquidTheme.palette.gradientStart
-    val contentColor = onColorFor(paletteStart)
+    val midColor = androidx.compose.ui.graphics.lerp(paletteStart, accent, 0.5f)
+    val contentColor = onColorFor(midColor)
 
     val buttonBrush = Brush.linearGradient(
         colors = listOf(
-            paletteStart.copy(alpha = if (enabled) 0.88f else 0.40f),
-            accent.copy(alpha = if (enabled) 0.78f else 0.35f)
+            paletteStart.copy(alpha = if (enabled) 0.94f else 0.45f),
+            accent.copy(alpha = if (enabled) 0.90f else 0.40f)
         )
     )
 
@@ -660,18 +669,14 @@ fun LiquidPrimaryButton(
             .fillMaxWidth()
             .height(52.dp)
             .scale(scale)
-            .liquidGlass(
-                shape = CircleShape,
-                elevation = if (isPressed) 2.dp else 8.dp,
-                tintAlpha = 0.20f,
-                borderAlpha = 0.90f
-            )
+            .shadow(if (isPressed) 2.dp else 8.dp, CircleShape, spotColor = accent.copy(alpha = 0.35f))
+            .clip(CircleShape)
             .background(buttonBrush, CircleShape)
             .border(
                 1.dp,
                 Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.75f),
+                        Color.White.copy(alpha = 0.72f),
                         accent.copy(alpha = 0.85f)
                     )
                 ),
@@ -1095,14 +1100,14 @@ fun LiquidSwitch(
             )
         )
     } else {
-        val offColor = if (LiquidTheme.isDark) Color.Black.copy(alpha = 0.28f) else Color.Black.copy(alpha = 0.14f)
+        val offColor = if (LiquidTheme.isDark) Color.Black.copy(alpha = 0.32f) else Color(0xFF94A3B8).copy(alpha = 0.45f)
         Brush.horizontalGradient(listOf(offColor, offColor))
     }
 
     val borderColor = if (checked) {
         accent
     } else {
-        if (LiquidTheme.isDark) Color.White.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.22f)
+        if (LiquidTheme.isDark) Color.White.copy(alpha = 0.45f) else Color(0xFF475569).copy(alpha = 0.35f)
     }
 
     Box(
@@ -1244,6 +1249,9 @@ fun LiquidGlassSpinner(
         label = "pulse"
     )
 
+    val isDark = LiquidTheme.isDark
+    val coreHighlight = if (isDark) Color.White else LiquidTheme.glassSurfaceColor
+
     Box(
         modifier = modifier
             .size(size)
@@ -1252,14 +1260,13 @@ fun LiquidGlassSpinner(
     ) {
         Canvas(modifier = Modifier.fillMaxSize().padding(size * 0.15f)) {
             val strokeWidth = 3.dp.toPx()
-            val canvasSize = this.size.minDimension
             drawArc(
                 brush = Brush.sweepGradient(
                     colors = listOf(
-                        ringColor.copy(alpha = 0.1f),
-                        ringColor.copy(alpha = 0.4f),
+                        ringColor.copy(alpha = 0.12f),
+                        ringColor.copy(alpha = 0.48f),
                         ringColor,
-                        Color.White
+                        if (isDark) Color.White else ringColor
                     )
                 ),
                 startAngle = rotation,
@@ -1276,7 +1283,7 @@ fun LiquidGlassSpinner(
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
-                        listOf(Color.White, ringColor.copy(alpha = 0.7f))
+                        listOf(coreHighlight, ringColor.copy(alpha = 0.72f))
                     )
                 )
         )
@@ -1314,7 +1321,7 @@ fun LiquidBottomBar(
             .liquidGlass(
                 shape = RoundedCornerShape(36.dp),
                 elevation = 12.dp,
-                tintAlpha = if (isDark) 0.36f else 0.72f,
+                tintAlpha = if (isDark) 0.50f else 0.88f,
                 borderAlpha = if (isDark) 0.72f else 0.70f
             )
     ) {
@@ -1388,6 +1395,7 @@ fun LiquidTopBar(
                 .liquidGlass(
                     shape = RoundedCornerShape(28.dp),
                     elevation = 6.dp,
+                    tintAlpha = if (LiquidTheme.isDark) 0.48f else 0.86f,
                     borderAlpha = 0.75f
                 )
                 .padding(horizontal = 12.dp),
@@ -1464,7 +1472,12 @@ fun LiquidAlertDialog(
                 Modifier
                     .width(320.dp)
                     .clickable(enabled = false) {}
-                    .liquidGlass(shape = RoundedCornerShape(26.dp), elevation = 16.dp)
+                    .liquidGlass(
+                        hazeState = null,
+                        shape = RoundedCornerShape(26.dp),
+                        tintAlpha = if (LiquidTheme.isDark) 0.90f else 0.95f,
+                        elevation = 16.dp
+                    )
             ) {
                 Column(
                     Modifier.fillMaxWidth(),
