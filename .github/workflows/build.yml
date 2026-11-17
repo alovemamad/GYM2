@@ -1,9 +1,12 @@
-name: Build and Sign APK
+name: Build, Sign & Release APK
 
 on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -11,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
@@ -22,6 +27,35 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Compute Monotonic App Version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_NUM=${{ github.run_number }}
+          LAST_TAG=$(gh release list --limit 10 --json tagName --jq '.[].tagName' 2>/dev/null | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+          LAST_PATCH=0
+          if [[ -n "$LAST_TAG" ]]; then
+            CLEAN_TAG="${LAST_TAG#v}"
+            LAST_PATCH=$(echo "$CLEAN_TAG" | awk -F. '{print $3}')
+            if ! [[ "$LAST_PATCH" =~ ^[0-9]+$ ]]; then
+              LAST_PATCH=0
+            fi
+          fi
+
+          NEXT_PATCH=$((LAST_PATCH + 1))
+          if (( RUN_NUM > NEXT_PATCH )); then
+            NEXT_PATCH=$RUN_NUM
+          fi
+
+          VERSION_CODE=$((NEXT_PATCH + 1))
+          VERSION_NAME="1.0.${NEXT_PATCH}"
+          TAG_NAME="v${VERSION_NAME}"
+
+          echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+          echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+          echo "Computed release version: ${TAG_NAME} (versionCode=${VERSION_CODE})"
+
       - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -29,15 +63,45 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 --decode > $GITHUB_WORKSPACE/my-upload-key.jks
           echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/my-upload-key.jks" >> $GITHUB_ENV
 
-      # اینجا به جای ./gradlew از gradle استفاده کردیم
       - name: Build Release APK
         env:
           STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle assembleRelease
+        run: |
+          gradle assembleRelease \
+            -PappVersionCode="${{ env.VERSION_CODE }}" \
+            -PappVersionName="${{ env.VERSION_NAME }}" \
+            -PgithubRepo="${{ github.repository }}"
 
-      - name: Upload APK
+      - name: Prepare Release APK Asset
+        run: |
+          mkdir -p release-apk
+          APK_SOURCE=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [[ -z "$APK_SOURCE" ]]; then
+            echo "Release APK not found!"
+            exit 1
+          fi
+          cp "$APK_SOURCE" "release-apk/GYM-PRO-${{ env.TAG_NAME }}.apk"
+          ls -lh release-apk/
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: app/build/outputs/apk/release/*.apk
+          name: app-release-${{ env.TAG_NAME }}
+          path: release-apk/*.apk
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: "GYM PRO ${{ env.TAG_NAME }}"
+          body: |
+            نسخه جدید اپلیکیشن **GYM PRO** (${{ env.TAG_NAME }} • بیلد ${{ env.VERSION_CODE }})
+
+            تغییرات این نسخه:
+            - ${{ github.event.head_commit.message }}
+          files: release-apk/*.apk
+          generate_release_notes: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

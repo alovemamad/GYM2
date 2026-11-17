@@ -103,12 +103,12 @@ object LiquidTheme {
     val surfaceSolid: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) Color.White.copy(alpha = 0.09f) else Color.White.copy(alpha = 0.62f)
+        get() = if (isDark) palette.gradientEnd.copy(alpha = 0.26f) else Color.White.copy(alpha = 0.68f)
 
     val surfaceElevated: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.06f)
+        get() = if (isDark) accentColor.copy(alpha = 0.14f) else accentColor.copy(alpha = 0.10f)
 
     val backgroundNeutral: Color
         @Composable
@@ -118,17 +118,17 @@ object LiquidTheme {
     val dividerColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = Color.White.copy(alpha = 0.15f)
+        get() = if (isDark) Color.White.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.10f)
 
     val textPrimary: Color
         @Composable
         @ReadOnlyComposable
-        get() = Color.White
+        get() = if (isDark) DarkTextPrimary else Color(0xFF101318)
 
     val textSecondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = Color.White.copy(alpha = 0.82f)
+        get() = if (isDark) Color.White.copy(alpha = 0.80f) else Color(0xFF3E444E)
 }
 
 fun createLiquidColorScheme(palette: LiquidPalette, isDark: Boolean): ColorScheme {

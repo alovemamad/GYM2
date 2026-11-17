@@ -177,9 +177,24 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     } else {
-                        // دکمه برگشت: از هر تب به پیشخوان، و از پیشخوان خروج از برنامه
+                        // دکمه برگشت: از تب‌های دیگر به پیشخوان، و از پیشخوان با دو بار فشردن به پس‌زمینه (بدون ریست شدن برنامه)
+                        var lastBackPressedAt by remember { mutableLongStateOf(0L) }
                         BackHandler(enabled = screenRoute != Screen.Dashboard.route) {
                             currentScreen = Screen.Dashboard.route
+                        }
+                        BackHandler(enabled = screenRoute == Screen.Dashboard.route) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastBackPressedAt <= 2000L) {
+                                (context as? android.app.Activity)?.moveTaskToBack(true)
+                            } else {
+                                lastBackPressedAt = now
+                                val msg = if (isWorkoutActive) {
+                                    "تمرین فعال دارید! برای رفتن به پس‌زمینه دوباره بازگشت را بزنید"
+                                } else {
+                                    "برای خروج، دکمه بازگشت را دوباره بزنید"
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
                         }
                         Scaffold(
                             containerColor = androidx.compose.ui.graphics.Color.Transparent,

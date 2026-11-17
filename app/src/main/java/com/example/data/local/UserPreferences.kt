@@ -8,6 +8,66 @@ import kotlinx.coroutines.flow.map
 
 val Context.dataStore by preferencesDataStore(name = "gym_user_preferences")
 
+data class SoundSettingsSnapshot(
+    val inAppSoundsEnabled: Boolean = true,
+    val restTimerVolume: Float = 0.8f,
+    val timedAlarmVolume: Float = 0.9f,
+    val reminderVolume: Float = 0.8f
+)
+
+object SoundPrefsCache {
+    private const val PREF_NAME = "gym_sound_prefs"
+    private const val KEY_ENABLED = "in_app_sounds_enabled"
+    private const val KEY_REST = "rest_timer_volume"
+    private const val KEY_TIMED = "timed_alarm_volume"
+    private const val KEY_REMINDER = "reminder_volume"
+
+    fun save(
+        context: Context,
+        enabled: Boolean,
+        restVol: Float,
+        timedVol: Float,
+        reminderVol: Float
+    ) {
+        try {
+            context.applicationContext
+                .getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_ENABLED, enabled)
+                .putFloat(KEY_REST, restVol.coerceIn(0f, 1f))
+                .putFloat(KEY_TIMED, timedVol.coerceIn(0f, 1f))
+                .putFloat(KEY_REMINDER, reminderVol.coerceIn(0f, 1f))
+                .apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    fun get(context: Context): SoundSettingsSnapshot {
+        return try {
+            val sp = context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+            SoundSettingsSnapshot(
+                inAppSoundsEnabled = sp.getBoolean(KEY_ENABLED, true),
+                restTimerVolume = sp.getFloat(KEY_REST, 0.8f).coerceIn(0f, 1f),
+                timedAlarmVolume = sp.getFloat(KEY_TIMED, 0.9f).coerceIn(0f, 1f),
+                reminderVolume = sp.getFloat(KEY_REMINDER, 0.8f).coerceIn(0f, 1f)
+            )
+        } catch (_: Exception) {
+            SoundSettingsSnapshot()
+        }
+    }
+
+    fun clear(context: Context) {
+        try {
+            context.applicationContext
+                .getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply()
+        } catch (_: Exception) {
+        }
+    }
+}
+
 data class UserSettings(
     val userName: String = "",
     val profilePhotoUri: String = "",
@@ -34,7 +94,8 @@ data class UserSettings(
     val inAppSoundsEnabled: Boolean = true,
     val restTimerVolume: Float = 0.8f,
     val timedAlarmVolume: Float = 0.9f,
-    val reminderVolume: Float = 0.8f
+    val reminderVolume: Float = 0.8f,
+    val githubRepo: String = ""
 )
 
 class UserPreferences(private val context: Context) {
@@ -65,6 +126,7 @@ class UserPreferences(private val context: Context) {
     private val KEY_REST_TIMER_VOLUME = floatPreferencesKey("rest_timer_volume")
     private val KEY_TIMED_ALARM_VOLUME = floatPreferencesKey("timed_alarm_volume")
     private val KEY_REMINDER_VOLUME = floatPreferencesKey("reminder_volume")
+    private val KEY_GITHUB_REPO = stringPreferencesKey("github_repo")
 
     val userSettingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
         val rawAge = prefs[KEY_AGE]
@@ -93,6 +155,13 @@ class UserPreferences(private val context: Context) {
             else -> "SYSTEM" to "SPORT_RED"
         }
 
+        val inAppSoundsEnabled = prefs[KEY_IN_APP_SOUNDS_ENABLED] ?: true
+        val restTimerVolume = prefs[KEY_REST_TIMER_VOLUME] ?: 0.8f
+        val timedAlarmVolume = prefs[KEY_TIMED_ALARM_VOLUME] ?: 0.9f
+        val reminderVolume = prefs[KEY_REMINDER_VOLUME] ?: 0.8f
+
+        SoundPrefsCache.save(context, inAppSoundsEnabled, restTimerVolume, timedAlarmVolume, reminderVolume)
+
         UserSettings(
             userName = prefs[KEY_USER_NAME] ?: "",
             profilePhotoUri = prefs[KEY_PROFILE_PHOTO] ?: "",
@@ -116,14 +185,22 @@ class UserPreferences(private val context: Context) {
             supplementReminderTime = prefs[KEY_SUPPLEMENT_REMINDER_TIME] ?: "09:00",
             onboardingCompleted = prefs[KEY_ONBOARDING_COMPLETED] ?: false,
             lastBackupTime = prefs[KEY_LAST_BACKUP] ?: 0L,
-            inAppSoundsEnabled = prefs[KEY_IN_APP_SOUNDS_ENABLED] ?: true,
-            restTimerVolume = prefs[KEY_REST_TIMER_VOLUME] ?: 0.8f,
-            timedAlarmVolume = prefs[KEY_TIMED_ALARM_VOLUME] ?: 0.9f,
-            reminderVolume = prefs[KEY_REMINDER_VOLUME] ?: 0.8f
+            inAppSoundsEnabled = inAppSoundsEnabled,
+            restTimerVolume = restTimerVolume,
+            timedAlarmVolume = timedAlarmVolume,
+            reminderVolume = reminderVolume,
+            githubRepo = prefs[KEY_GITHUB_REPO] ?: ""
         )
     }
 
     suspend fun updateSettings(settings: UserSettings) {
+        SoundPrefsCache.save(
+            context,
+            settings.inAppSoundsEnabled,
+            settings.restTimerVolume,
+            settings.timedAlarmVolume,
+            settings.reminderVolume
+        )
         context.dataStore.edit { prefs ->
             prefs[KEY_USER_NAME] = settings.userName
             prefs[KEY_PROFILE_PHOTO] = settings.profilePhotoUri
@@ -151,16 +228,22 @@ class UserPreferences(private val context: Context) {
             prefs[KEY_REST_TIMER_VOLUME] = settings.restTimerVolume
             prefs[KEY_TIMED_ALARM_VOLUME] = settings.timedAlarmVolume
             prefs[KEY_REMINDER_VOLUME] = settings.reminderVolume
+            prefs[KEY_GITHUB_REPO] = settings.githubRepo
         }
     }
 
     suspend fun updateSoundSettings(enabled: Boolean, restVol: Float, timedVol: Float, reminderVol: Float) {
+        SoundPrefsCache.save(context, enabled, restVol, timedVol, reminderVol)
         context.dataStore.edit { prefs ->
             prefs[KEY_IN_APP_SOUNDS_ENABLED] = enabled
             prefs[KEY_REST_TIMER_VOLUME] = restVol
             prefs[KEY_TIMED_ALARM_VOLUME] = timedVol
             prefs[KEY_REMINDER_VOLUME] = reminderVol
         }
+    }
+
+    suspend fun setGithubRepo(repo: String) {
+        context.dataStore.edit { it[KEY_GITHUB_REPO] = repo.trim() }
     }
 
     suspend fun setOnboardingCompleted(completed: Boolean) {
@@ -188,6 +271,7 @@ class UserPreferences(private val context: Context) {
     }
 
     suspend fun clearAll() {
+        SoundPrefsCache.clear(context)
         context.dataStore.edit { it.clear() }
     }
 }

@@ -202,7 +202,7 @@ fun NutritionScreen(
                             Text(
                                 text = if (isToday) "امروز" else JalaliCalendar.formatWeekdayShort(gDate),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) Color.White.copy(alpha = 0.85f) else LiquidTheme.textSecondary
+                                color = if (isSelected) LiquidTheme.onAccent.copy(alpha = 0.85f) else LiquidTheme.textSecondary
                             )
                             Text(
                                 text = PersianNumberHelper.toPersianDigits(jDate.day),

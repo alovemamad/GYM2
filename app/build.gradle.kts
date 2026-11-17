@@ -16,8 +16,20 @@ android {
     applicationId = "com.aistudio.gymtracker.vzkqf"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+
+    val propVersionCode = (project.findProperty("appVersionCode") as? String)?.toIntOrNull()
+      ?: System.getenv("APP_VERSION_CODE")?.toIntOrNull()
+      ?: 1
+    val propVersionName = (project.findProperty("appVersionName") as? String)?.takeIf { it.isNotBlank() }
+      ?: System.getenv("APP_VERSION_NAME")?.takeIf { it.isNotBlank() }
+      ?: "1.0.0"
+    val propGithubRepo = (project.findProperty("githubRepo") as? String)?.takeIf { it.isNotBlank() }
+      ?: System.getenv("GITHUB_REPOSITORY")?.takeIf { it.isNotBlank() }
+      ?: "alovemamad/GYM2"
+
+    versionCode = propVersionCode
+    versionName = propVersionName
+    buildConfigField("String", "GITHUB_REPO", "\"${propGithubRepo.replace("\"", "")}\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

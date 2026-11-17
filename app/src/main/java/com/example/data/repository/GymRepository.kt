@@ -364,6 +364,10 @@ class GymRepository(
         userPreferences.updateSoundSettings(enabled, restVol, timedVol, reminderVol)
     }
 
+    suspend fun setGithubRepo(repo: String) {
+        userPreferences.setGithubRepo(repo)
+    }
+
     // Do not seed any pre-made workout plans as per user requirement (clean slate)
     suspend fun seedStarterPlanIfEmpty() {
         // Intentionally empty: users create or import their own plans

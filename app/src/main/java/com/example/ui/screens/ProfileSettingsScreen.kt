@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,14 +16,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,16 +39,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.example.BuildConfig
 import com.example.R
+import com.example.data.local.SoundPrefsCache
 import com.example.data.local.UserSettings
 import com.example.ui.components.*
 import com.example.ui.theme.*
-import com.example.util.BackupHelper
-import com.example.util.ImageStorageHelper
 import com.example.util.AlertType
+import com.example.util.AppUpdateHelper
+import com.example.util.BackupHelper
+import com.example.util.BackupSaveResult
+import com.example.util.ImageStorageHelper
+import com.example.util.InstallLaunchStatus
 import com.example.util.NotificationHelper
 import com.example.util.PersianNumberHelper
+import com.example.util.ReleaseUpdateInfo
+import com.example.util.UpdateCheckResult
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -61,13 +75,13 @@ fun ProfileSettingsScreen(
     onClearAllData: () -> Unit,
     onOpenOnboarding: () -> Unit,
     onUpdateProfilePhoto: (String) -> Unit = {},
-    onUpdateSoundSettings: (Boolean, Float, Float, Float) -> Unit = { _, _, _, _ -> }
+    onUpdateSoundSettings: (Boolean, Float, Float, Float) -> Unit = { _, _, _, _ -> },
+    onSetGithubRepo: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    var currentSubScreen by remember { mutableStateOf<String?>(null) } // null, "appearance", "reminders", "goals"
-    var searchQuery by remember { mutableStateOf("") }
+    var currentSubScreen by rememberSaveable { mutableStateOf<String?>(null) } // null, "appearance", "reminders"
 
     var showClearDataConfirm by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
@@ -75,9 +89,10 @@ fun ProfileSettingsScreen(
     var aiPromptContent by remember { mutableStateOf("") }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var showBackupSuccessDialog by remember { mutableStateOf(false) }
-    var lastSavedBackupFile by remember { mutableStateOf<File?>(null) }
+    var lastSavedBackupResult by remember { mutableStateOf<BackupSaveResult?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
 
-    // Permission launcher for Android 13+
+    // Permission launcher for Android 13+ notifications
     var hasNotifPermission by remember { mutableStateOf(NotificationHelper.hasNotificationPermission(context)) }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -90,35 +105,42 @@ fun ProfileSettingsScreen(
         }
     }
 
-    // Save backup to a user-chosen location (Storage Access Framework — no storage permission needed)
-    var pendingBackupJson by remember { mutableStateOf<String?>(null) }
-    val createBackupLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
-    ) { uri: Uri? ->
-        val json = pendingBackupJson
-        pendingBackupJson = null
-        if (uri != null && json != null) {
+    val performBackupExport: () -> Unit = {
+        coroutineScope.launch {
             try {
-                context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
-                    out.write(json.toByteArray(Charsets.UTF_8))
-                } ?: throw IllegalStateException("stream")
-                lastSavedBackupFile = BackupHelper.saveBackupToFile(context, json)
+                val json = onExportBackupJson()
+                val res = BackupHelper.saveBackupWithDetails(context, json)
+                lastSavedBackupResult = res
                 showBackupSuccessDialog = true
-            } catch (_: Exception) {
-                Toast.makeText(context, "ذخیره فایل پشتیبان ناموفق بود. محل دیگری را امتحان کنید.", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "خطا در ایجاد فایل پشتیبان: ${e.message ?: "نامشخص"}", Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    // File picker launcher to restore any .json file
-    val filePickerLauncher = rememberLauncherForActivityResult(
+    // Legacy storage permission launcher (Android 9 and below only)
+    var pendingStorageAction by remember { mutableStateOf<String?>(null) } // "BACKUP" or "RESTORE"
+    val legacyStoragePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val allGranted = grants.values.all { it }
+        when (pendingStorageAction) {
+            "BACKUP" -> {
+                if (!allGranted) {
+                    Toast.makeText(context, "مجوز حافظه داده نشد؛ فایل در پوشه اختصاصی برنامه ذخیره شد.", Toast.LENGTH_SHORT).show()
+                }
+                performBackupExport()
+            }
+            "RESTORE" -> showRestoreDialog = true
+        }
+        pendingStorageAction = null
+    }
+
+    // SAF OpenDocument launcher to restore any .json file without broad storage permissions
+    val restoreDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } catch (_: Exception) {
-            }
             coroutineScope.launch {
                 val readRes = BackupHelper.readBackupFromUri(context, uri)
                 if (readRes.isSuccess) {
@@ -142,7 +164,28 @@ fun ProfileSettingsScreen(
                         Toast.makeText(context, "خطا در بازیابی اطلاعات دیتابیس.", Toast.LENGTH_LONG).show()
                     }
                 } else {
-                    Toast.makeText(context, "فرمت فایل نامعتبر است.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "فایل انتخاب‌شده یک پشتیبان معتبر GYM نیست.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    // SAF CreateDocument launcher so user can export backup .json to any folder they choose
+    val createBackupDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            coroutineScope.launch {
+                try {
+                    val json = onExportBackupJson()
+                    val writeRes = BackupHelper.writeBackupToUri(context, uri, json)
+                    if (writeRes.isSuccess) {
+                        Toast.makeText(context, "فایل پشتیبان با موفقیت در مسیر انتخابی ذخیره شد.", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(context, "خطا در ذخیره فایل در مسیر انتخابی.", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "خطا در ذخیره‌سازی: ${e.message ?: "نامشخص"}", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -339,7 +382,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور تمرین ورزشی",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.workoutReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.FitnessCenter,
-                                iconTint = LiquidTheme.iconRed,
+                                iconTint = SemanticIconRed,
                                 showArrow = true,
                                 showDivider = true,
                                 onClick = { timePickerTarget = "WORKOUT" },
@@ -360,7 +403,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور نوشیدن آب",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.waterReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.WaterDrop,
-                                iconTint = LiquidTheme.iconCyan,
+                                iconTint = SemanticIconCyan,
                                 showArrow = true,
                                 showDivider = true,
                                 onClick = { timePickerTarget = "WATER" },
@@ -381,7 +424,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور مصرف مکمل‌ها",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.supplementReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.Medication,
-                                iconTint = LiquidTheme.iconGreen,
+                                iconTint = SemanticIconGreen,
                                 showArrow = true,
                                 showDivider = false,
                                 onClick = { timePickerTarget = "SUPPLEMENT" },
@@ -467,6 +510,16 @@ fun ProfileSettingsScreen(
                                 if (userSettings.inAppSoundsEnabled) {
                                     HorizontalDivider(color = LiquidTheme.dividerColor, thickness = 0.5.dp)
 
+                                    var restVolDraft by remember(userSettings.restTimerVolume) {
+                                        mutableFloatStateOf(userSettings.restTimerVolume)
+                                    }
+                                    var timedVolDraft by remember(userSettings.timedAlarmVolume) {
+                                        mutableFloatStateOf(userSettings.timedAlarmVolume)
+                                    }
+                                    var reminderVolDraft by remember(userSettings.reminderVolume) {
+                                        mutableFloatStateOf(userSettings.reminderVolume)
+                                    }
+
                                     // 2. Rest timer beep volume slider
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Row(
@@ -475,19 +528,29 @@ fun ProfileSettingsScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text("حجم بوق تایمر استراحت:", style = MaterialTheme.typography.bodyMedium, color = LiquidTheme.textPrimary)
-                                            Text("${PersianNumberHelper.toPersianDigits((userSettings.restTimerVolume * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
+                                            Text("${PersianNumberHelper.toPersianDigits((restVolDraft * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
                                         }
                                         Slider(
-                                            value = userSettings.restTimerVolume,
+                                            value = restVolDraft,
                                             onValueChange = { newVol ->
+                                                restVolDraft = newVol
+                                                SoundPrefsCache.save(context, userSettings.inAppSoundsEnabled, newVol, timedVolDraft, reminderVolDraft)
+                                            },
+                                            onValueChangeFinished = {
                                                 onUpdateSoundSettings(
                                                     userSettings.inAppSoundsEnabled,
-                                                    newVol,
-                                                    userSettings.timedAlarmVolume,
-                                                    userSettings.reminderVolume
+                                                    restVolDraft,
+                                                    timedVolDraft,
+                                                    reminderVolDraft
+                                                )
+                                                NotificationHelper.playAlarmSoundAndVibrate(
+                                                    context,
+                                                    AlertType.REST_END,
+                                                    overrideVolume = restVolDraft,
+                                                    withVibration = false
                                                 )
                                             },
-                                            onValueChangeFinished = { NotificationHelper.playPreview(context, AlertType.REST_END, userSettings.restTimerVolume) },
+                                            modifier = Modifier.testTag("slider_rest_volume"),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = LiquidTheme.accentColor,
                                                 activeTrackColor = LiquidTheme.accentColor,
@@ -504,19 +567,29 @@ fun ProfileSettingsScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text("حجم آلارم پایان حرکات زمان‌دار (پلانک):", style = MaterialTheme.typography.bodyMedium, color = LiquidTheme.textPrimary)
-                                            Text("${PersianNumberHelper.toPersianDigits((userSettings.timedAlarmVolume * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
+                                            Text("${PersianNumberHelper.toPersianDigits((timedVolDraft * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
                                         }
                                         Slider(
-                                            value = userSettings.timedAlarmVolume,
+                                            value = timedVolDraft,
                                             onValueChange = { newVol ->
+                                                timedVolDraft = newVol
+                                                SoundPrefsCache.save(context, userSettings.inAppSoundsEnabled, restVolDraft, newVol, reminderVolDraft)
+                                            },
+                                            onValueChangeFinished = {
                                                 onUpdateSoundSettings(
                                                     userSettings.inAppSoundsEnabled,
-                                                    userSettings.restTimerVolume,
-                                                    newVol,
-                                                    userSettings.reminderVolume
+                                                    restVolDraft,
+                                                    timedVolDraft,
+                                                    reminderVolDraft
+                                                )
+                                                NotificationHelper.playAlarmSoundAndVibrate(
+                                                    context,
+                                                    AlertType.EXERCISE_END,
+                                                    overrideVolume = timedVolDraft,
+                                                    withVibration = false
                                                 )
                                             },
-                                            onValueChangeFinished = { NotificationHelper.playPreview(context, AlertType.EXERCISE_END, userSettings.timedAlarmVolume) },
+                                            modifier = Modifier.testTag("slider_timed_volume"),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = LiquidTheme.accentColor,
                                                 activeTrackColor = LiquidTheme.accentColor,
@@ -533,19 +606,29 @@ fun ProfileSettingsScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text("حجم صدای زنگ اعلان‌ها و یادآورها:", style = MaterialTheme.typography.bodyMedium, color = LiquidTheme.textPrimary)
-                                            Text("${PersianNumberHelper.toPersianDigits((userSettings.reminderVolume * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
+                                            Text("${PersianNumberHelper.toPersianDigits((reminderVolDraft * 100).toInt())}٪", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.accentColor)
                                         }
                                         Slider(
-                                            value = userSettings.reminderVolume,
+                                            value = reminderVolDraft,
                                             onValueChange = { newVol ->
+                                                reminderVolDraft = newVol
+                                                SoundPrefsCache.save(context, userSettings.inAppSoundsEnabled, restVolDraft, timedVolDraft, newVol)
+                                            },
+                                            onValueChangeFinished = {
                                                 onUpdateSoundSettings(
                                                     userSettings.inAppSoundsEnabled,
-                                                    userSettings.restTimerVolume,
-                                                    userSettings.timedAlarmVolume,
-                                                    newVol
+                                                    restVolDraft,
+                                                    timedVolDraft,
+                                                    reminderVolDraft
+                                                )
+                                                NotificationHelper.playAlarmSoundAndVibrate(
+                                                    context,
+                                                    AlertType.WORKOUT,
+                                                    overrideVolume = reminderVolDraft,
+                                                    withVibration = false
                                                 )
                                             },
-                                            onValueChangeFinished = { NotificationHelper.playPreview(context, AlertType.WORKOUT, userSettings.reminderVolume) },
+                                            modifier = Modifier.testTag("slider_reminder_volume"),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = LiquidTheme.accentColor,
                                                 activeTrackColor = LiquidTheme.accentColor,
@@ -563,10 +646,11 @@ fun ProfileSettingsScreen(
                             text = "تست ارسال اعلان و آلارم صوتی",
                             icon = Icons.Filled.NotificationsActive,
                             onClick = {
-                                if (!hasNotifPermission) {
+                                if (!hasNotifPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
                                 onTestNotification()
+                                NotificationHelper.playAlarmSoundAndVibrate(context, AlertType.WORKOUT)
                                 Toast.makeText(context, "اعلان و زنگ تست با موفقیت ارسال شد!", Toast.LENGTH_SHORT).show()
                             }
                         )
@@ -699,7 +783,7 @@ fun ProfileSettingsScreen(
                                         title = "ظاهر و پالت‌های رنگی",
                                         subtitle = "حالت سیستم و ۸ پالت اختصاصی Liquid Glass",
                                         icon = Icons.Filled.Palette,
-                                        iconTint = LiquidTheme.iconPurple,
+                                        iconTint = SemanticIconPurple,
                                         showDivider = true,
                                         onClick = { currentSubScreen = "appearance" }
                                     )
@@ -708,7 +792,7 @@ fun ProfileSettingsScreen(
                                         title = "یادآورها و هشدارها",
                                         subtitle = "تمرین، مصرف آب و مکمل‌ها",
                                         icon = Icons.Filled.Notifications,
-                                        iconTint = LiquidTheme.iconOrange,
+                                        iconTint = SemanticIconOrange,
                                         showDivider = false,
                                         onClick = { currentSubScreen = "reminders" }
                                     )
@@ -717,47 +801,88 @@ fun ProfileSettingsScreen(
                         }
                     }
 
-                    // Group 2: Dedicated File Storage Backup & Restore
+                    // Group 2: Dedicated File Storage Backup, Restore & Updates
                     item {
                         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                LiquidSectionHeader(title = "پشتیبان‌گیری در حافظه گوشی")
+                                LiquidSectionHeader(title = "پشتیبان‌گیری و بروزرسانی")
 
                                 SolidGroupedCard {
                                     GroupedRow(
-                                        title = "ساخت فایل پشتیبان (انتخاب محل ذخیره)",
-                                        subtitle = "ذخیره فایل .json در Downloads یا هر پوشه دلخواه",
+                                        title = "ایجاد فایل پشتیبان جدید در حافظه",
+                                        subtitle = "ذخیره فایل JSON در پوشه دانلودها و حافظه برنامه",
                                         icon = Icons.Filled.Save,
-                                        iconTint = LiquidTheme.iconBlue,
+                                        iconTint = SemanticIconBlue,
                                         showDivider = true,
+                                        modifier = Modifier.testTag("create_backup_file_row"),
                                         onClick = {
-                                            coroutineScope.launch {
-                                                val json = onExportBackupJson()
-                                                pendingBackupJson = json
-                                                val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.US).format(java.util.Date())
-                                                try {
-                                                    createBackupLauncher.launch("gym_pro_backup_$stamp.json")
-                                                } catch (_: Exception) {
-                                                    Toast.makeText(context, "برنامه مدیریت فایل در دسترس نیست.", Toast.LENGTH_LONG).show()
-                                                }
+                                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && !BackupHelper.hasLegacyStoragePermission(context)) {
+                                                pendingStorageAction = "BACKUP"
+                                                legacyStoragePermissionLauncher.launch(
+                                                    arrayOf(
+                                                        Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                                                        Manifest.permission.READ_EXTERNAL_STORAGE
+                                                    )
+                                                )
+                                            } else {
+                                                performBackupExport()
+                                            }
+                                        }
+                                    )
+
+                                    GroupedRow(
+                                        title = "ذخیره فایل پشتیبان در مسیر دلخواه",
+                                        subtitle = "انتخاب پوشه دلخواه با مدیریت فایل سیستم",
+                                        icon = Icons.Filled.CreateNewFolder,
+                                        iconTint = SemanticIconPurple,
+                                        showDivider = true,
+                                        modifier = Modifier.testTag("save_backup_saf_row"),
+                                        onClick = {
+                                            try {
+                                                createBackupDocumentLauncher.launch("gym_pro_backup.json")
+                                            } catch (_: Exception) {
+                                                Toast.makeText(context, "امکان باز کردن انتخابگر پوشه وجود ندارد.", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     )
 
                                     GroupedRow(
                                         title = "بازیابی اطلاعات از فایل پشتیبان",
-                                        subtitle = "انتخاب فایل پشتیبان از حافظه گوشی",
+                                        subtitle = "بازیابی از پوشه برنامه یا انتخاب فایل از گوشی",
                                         icon = Icons.Filled.Restore,
-                                        iconTint = LiquidTheme.iconGreen,
+                                        iconTint = SemanticIconGreen,
                                         showDivider = true,
-                                        onClick = { showRestoreDialog = true }
+                                        modifier = Modifier.testTag("restore_backup_file_row"),
+                                        onClick = {
+                                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && !BackupHelper.hasLegacyStoragePermission(context)) {
+                                                pendingStorageAction = "RESTORE"
+                                                legacyStoragePermissionLauncher.launch(
+                                                    arrayOf(
+                                                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                                                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                                    )
+                                                )
+                                            } else {
+                                                showRestoreDialog = true
+                                            }
+                                        }
+                                    )
+
+                                    GroupedRow(
+                                        title = "بروزرسانی برنامه",
+                                        subtitle = "نسخه فعلی: ${PersianNumberHelper.toPersianDigits(BuildConfig.VERSION_NAME)} • بررسی و دانلود نسخه جدید",
+                                        icon = Icons.Filled.SystemUpdate,
+                                        iconTint = LiquidTheme.accentColor,
+                                        showDivider = true,
+                                        modifier = Modifier.testTag("check_update_row"),
+                                        onClick = { showUpdateDialog = true }
                                     )
 
                                     GroupedRow(
                                         title = "خروجی هوشمند برای هوش مصنوعی",
-                                        subtitle = "پرامپت آنالیز جامع برای Gemini",
+                                        subtitle = "پرامپت آنالیز جامع تمرین و تغذیه",
                                         icon = Icons.Filled.AutoAwesome,
-                                        iconTint = LiquidTheme.iconIndigo,
+                                        iconTint = SemanticIconIndigo,
                                         showDivider = true,
                                         onClick = {
                                             coroutineScope.launch {
@@ -771,7 +896,7 @@ fun ProfileSettingsScreen(
                                         title = "درباره GYM",
                                         subtitle = "انگیزشی • ارتباط با توسعه‌دهنده",
                                         icon = Icons.Filled.Info,
-                                        iconTint = LiquidTheme.iconCyan,
+                                        iconTint = SemanticIconCyan,
                                         showDivider = false,
                                         onClick = { showAboutDialog = true }
                                     )
@@ -807,24 +932,32 @@ fun ProfileSettingsScreen(
 
     // Backup Created Success Dialog
     if (showBackupSuccessDialog) {
-        val file = lastSavedBackupFile ?: BackupHelper.getAppBackupFile(context)
+        val result = lastSavedBackupResult
+        val file = result?.appFile ?: BackupHelper.getAppBackupFile(context)
         val sizeKb = (file.length() / 1024).coerceAtLeast(1)
+        val displayLoc = result?.displayLocation ?: "پوشه اختصاصی GymPro_Backups"
         LiquidAlertDialog(
             onDismissRequest = { showBackupSuccessDialog = false },
             title = "فایل پشتیبان ذخیره شد",
-            message = "فایل پشتیبان در محلی که انتخاب کردید ذخیره شد. یک نسخه هم در پوشه برنامه نگه‌داری می‌شود.",
+            message = if (result?.exportedToDownloads == true) {
+                "فایل پشتیبان با موفقیت در پوشه دانلودها و حافظه اختصاصی برنامه ذخیره شد."
+            } else {
+                "فایل پشتیبان در پوشه اختصاصی برنامه ذخیره شد. همچنین می‌توانید آن را به صورت مستقیم به اشتراک بگذارید."
+            },
             confirmText = "ارسال و اشتراک فایل",
             dismissText = "بستن",
             onConfirm = {
                 try {
+                    val shareUri = BackupHelper.getShareUri(context, file)
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, "پشتیبان GYM")
-                        putExtra(Intent.EXTRA_TEXT, file.readText())
+                        type = "application/json"
+                        putExtra(Intent.EXTRA_SUBJECT, "فایل پشتیبان GYM PRO")
+                        putExtra(Intent.EXTRA_STREAM, shareUri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "اشتراک‌گذاری فایل پشتیبان"))
                 } catch (_: Exception) {
-                    Toast.makeText(context, "فایل در مسیر پوشه برنامه ذخیره است.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "فایل در مسیر $displayLoc ذخیره شده است.", Toast.LENGTH_SHORT).show()
                 }
             },
             content = {
@@ -839,7 +972,7 @@ fun ProfileSettingsScreen(
                     ) {
                         Text("نام فایل: ${file.name}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = LiquidTheme.textPrimary)
                         Text("حجم فایل: ${PersianNumberHelper.toPersianDigits(sizeKb)} کیلوبایت", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
-                        Text("مسیر: پوشه اختصاصی GymPro_Backups", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                        Text("مسیر: $displayLoc", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
                     }
                 }
             }
@@ -848,21 +981,19 @@ fun ProfileSettingsScreen(
 
     // Restore from File Dialog
     if (showRestoreDialog) {
-        val backupDir = remember(showRestoreDialog) { BackupHelper.getAppBackupDirectory(context) }
         val backupFiles = remember(showRestoreDialog) {
-            backupDir.listFiles { f -> f.isFile && f.extension.equals("json", ignoreCase = true) }
-                ?.sortedByDescending { it.lastModified() } ?: emptyList()
+            BackupHelper.listBackupFilesSafely(context)
         }
 
         LiquidAlertDialog(
             onDismissRequest = { showRestoreDialog = false },
             title = "بازیابی از فایل پشتیبان",
-            message = if (backupFiles.isNotEmpty()) "فایل موردنظر را از پوشه اختصاصی برنامه انتخاب کنید یا از حافظه خارجی برگزینید:" else "هنوز فایل پشتیبانی در پوشه برنامه یافت نشد. می‌توانید از حافظه دستگاه انتخاب کنید:",
-            confirmText = "انتخاب فایل دیگر از حافظه",
+            message = if (backupFiles.isNotEmpty()) "فایل موردنظر را از لیست زیر انتخاب کنید یا فایل JSON را از حافظه گوشی برگزینید:" else "فایل پشتیبان خود را از حافظه گوشی انتخاب کنید:",
+            confirmText = "انتخاب فایل از حافظه",
             dismissText = "انصراف",
             onConfirm = {
                 try {
-                    filePickerLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain", "*/*"))
+                    restoreDocumentLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                 } catch (_: Exception) {
                     Toast.makeText(context, "برنامه مدیریت فایلی برای انتخاب فایل در دسترس نیست.", Toast.LENGTH_LONG).show()
                 }
@@ -874,7 +1005,7 @@ fun ProfileSettingsScreen(
                 ) {
                     if (backupFiles.isNotEmpty()) {
                         Text(
-                            text = "فایل‌های موجود در پوشه GymPro_Backups:",
+                            text = "فایل‌های آماده در حافظه برنامه:",
                             style = MaterialTheme.typography.labelSmall,
                             color = LiquidTheme.textSecondary
                         )
@@ -1122,6 +1253,448 @@ fun ProfileSettingsScreen(
                 Toast.makeText(context, "ساعت اعلان با موفقیت تنظیم شد: ${PersianNumberHelper.toPersianDigits(newTime)}", Toast.LENGTH_SHORT).show()
             }
         )
+    }
+
+    if (showUpdateDialog) {
+        AppUpdateDialog(
+            onDismissRequest = { showUpdateDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun AppUpdateDialog(
+    onDismissRequest: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val targetRepo = remember { AppUpdateHelper.getEffectiveRepo() }
+
+    var isChecking by remember { mutableStateOf(false) }
+    var checkError by remember { mutableStateOf<String?>(null) }
+    var upToDateVersion by remember { mutableStateOf<String?>(null) }
+    var availableUpdate by remember { mutableStateOf<ReleaseUpdateInfo?>(null) }
+
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableIntStateOf(0) }
+    var downloadedBytes by remember { mutableLongStateOf(0L) }
+    var totalBytes by remember { mutableLongStateOf(0L) }
+    var downloadedFile by remember { mutableStateOf<File?>(null) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
+
+    fun triggerCheck() {
+        isChecking = true
+        checkError = null
+        upToDateVersion = null
+        availableUpdate = null
+        downloadedFile = null
+        downloadError = null
+
+        scope.launch {
+            val res = AppUpdateHelper.checkForUpdate(targetRepo)
+            isChecking = false
+            res.fold(
+                onSuccess = { outcome ->
+                    when (outcome) {
+                        is UpdateCheckResult.UpToDate -> {
+                            upToDateVersion = outcome.latestVersion
+                        }
+                        is UpdateCheckResult.UpdateAvailable -> {
+                            availableUpdate = outcome.info
+                        }
+                    }
+                },
+                onFailure = { err ->
+                    checkError = err.message ?: "خطا در بررسی نسخه جدید."
+                }
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        triggerCheck()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            downloadJob?.cancel()
+        }
+    }
+
+    fun startDownloadAndInstall(info: ReleaseUpdateInfo) {
+        if (isDownloading) return
+        isDownloading = true
+        downloadError = null
+        downloadProgress = 0
+        downloadedBytes = 0L
+        totalBytes = info.apkSizeBytes
+        downloadJob = scope.launch {
+            val res = AppUpdateHelper.downloadApk(
+                context = context,
+                downloadUrl = info.apkDownloadUrl,
+                fileName = info.apkName,
+                onProgress = { pct, dl, total ->
+                    downloadProgress = pct
+                    downloadedBytes = dl
+                    totalBytes = total
+                }
+            )
+            isDownloading = false
+            res.fold(
+                onSuccess = { apk ->
+                    downloadedFile = apk
+                    when (AppUpdateHelper.installApk(context, apk)) {
+                        InstallLaunchStatus.NEEDS_PERMISSION -> {
+                            Toast.makeText(
+                                context,
+                                "دانلود کامل شد! مجوز نصب را فعال کنید و سپس روی «نصب نسخه دانلود شده» بزنید.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        InstallLaunchStatus.ERROR -> {
+                            downloadError = "فایل دانلود شد اما اجرای نصب با خطا مواجه شد."
+                        }
+                        InstallLaunchStatus.LAUNCHED -> Unit
+                    }
+                },
+                onFailure = { err ->
+                    downloadError = err.message ?: "خطا در دانلود فایل بروزرسانی."
+                }
+            )
+        }
+    }
+
+    fun handleInstallReadyApk(apk: File) {
+        when (AppUpdateHelper.installApk(context, apk)) {
+            InstallLaunchStatus.NEEDS_PERMISSION -> {
+                Toast.makeText(
+                    context,
+                    "لطفاً مجوز نصب برنامه از منابع ناشناس را فعال کرده و سپس دکمه نصب را دوباره بزنید.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            InstallLaunchStatus.ERROR -> {
+                Toast.makeText(context, "خطا در اجرای نصب‌کننده.", Toast.LENGTH_SHORT).show()
+            }
+            InstallLaunchStatus.LAUNCHED -> Unit
+        }
+    }
+
+    val closeDialog: () -> Unit = {
+        downloadJob?.cancel()
+        onDismissRequest()
+    }
+
+    val actionLabel: String? = when {
+        downloadedFile != null -> "نصب نسخه جدید"
+        isDownloading -> null
+        availableUpdate != null -> "دانلود و نصب"
+        isChecking -> null
+        checkError != null || upToDateVersion != null -> "بررسی مجدد"
+        else -> "بررسی بروزرسانی"
+    }
+
+    Dialog(
+        onDismissRequest = {
+            if (!isDownloading) closeDialog()
+        },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.75f))
+                .clickable(enabled = !isDownloading) { closeDialog() },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier
+                    .width(330.dp)
+                    .clickable(enabled = false) {}
+                    .liquidGlass(shape = RoundedCornerShape(26.dp), elevation = 16.dp)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "بروزرسانی GYM PRO",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = LiquidTheme.textPrimary
+                        )
+                        Text(
+                            text = "نسخه فعلی نصب‌شده: ${PersianNumberHelper.toPersianDigits(BuildConfig.VERSION_NAME)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LiquidTheme.textSecondary,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 360.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            when {
+                                isChecking -> {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        LiquidGlassSpinner(size = 54.dp)
+                                        Text(
+                                            text = "در حال بررسی آخرین نسخه...",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = LiquidTheme.textSecondary
+                                        )
+                                    }
+                                }
+
+                                availableUpdate != null -> {
+                                    val info = availableUpdate!!
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = LiquidTheme.surfaceElevated
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "نسخه جدید موجود است!",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SemanticSuccess
+                                                )
+                                                Surface(
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = LiquidTheme.accentColor.copy(alpha = 0.18f)
+                                                ) {
+                                                    Text(
+                                                        text = "v${PersianNumberHelper.toPersianDigits(info.versionName)}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = LiquidTheme.accentColor,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
+                                                }
+                                            }
+                                            if (info.apkSizeBytes > 0L) {
+                                                val sizeMb = String.format("%.1f", info.apkSizeBytes / (1024.0 * 1024.0))
+                                                Text(
+                                                    text = "حجم فایل: ${PersianNumberHelper.toPersianDigits(sizeMb)} مگابایت",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = LiquidTheme.textSecondary
+                                                )
+                                            }
+                                            if (info.changelog.isNotBlank()) {
+                                                Text(
+                                                    text = info.changelog,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = LiquidTheme.textPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (isDownloading) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            val dlMb = String.format("%.1f", downloadedBytes / (1024.0 * 1024.0))
+                                            val pctText = if (downloadProgress >= 0) {
+                                                val totalText = if (totalBytes > 0L) {
+                                                    " (${PersianNumberHelper.toPersianDigits(dlMb)} / ${PersianNumberHelper.toPersianDigits(String.format("%.1f", totalBytes / (1024.0 * 1024.0)))} MB)"
+                                                } else ""
+                                                "${PersianNumberHelper.toPersianDigits(downloadProgress)}٪$totalText"
+                                            } else {
+                                                "${PersianNumberHelper.toPersianDigits(dlMb)} مگابایت"
+                                            }
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    "در حال دانلود فایل APK...",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = LiquidTheme.textSecondary
+                                                )
+                                                Text(
+                                                    pctText,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = LiquidTheme.accentColor
+                                                )
+                                            }
+                                            if (downloadProgress >= 0) {
+                                                LinearProgressIndicator(
+                                                    progress = { (downloadProgress / 100f).coerceIn(0f, 1f) },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(8.dp)
+                                                        .clip(CircleShape),
+                                                    color = LiquidTheme.accentColor,
+                                                    trackColor = LiquidTheme.surfaceElevated
+                                                )
+                                            } else {
+                                                LinearProgressIndicator(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(8.dp)
+                                                        .clip(CircleShape),
+                                                    color = LiquidTheme.accentColor,
+                                                    trackColor = LiquidTheme.surfaceElevated
+                                                )
+                                            }
+                                        }
+                                    } else if (downloadedFile != null) {
+                                        LiquidPrimaryButton(
+                                            text = "نصب نسخه دانلود شده",
+                                            icon = Icons.Filled.InstallMobile,
+                                            onClick = { handleInstallReadyApk(downloadedFile!!) },
+                                            modifier = Modifier.testTag("btn_install_downloaded_apk")
+                                        )
+                                    } else {
+                                        LiquidPrimaryButton(
+                                            text = "دانلود و نصب مستقیم",
+                                            icon = Icons.Filled.Download,
+                                            onClick = { startDownloadAndInstall(info) },
+                                            modifier = Modifier.testTag("btn_download_update_apk")
+                                        )
+                                    }
+
+                                    if (!downloadError.isNullOrBlank()) {
+                                        Text(
+                                            text = downloadError!!,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = SemanticError
+                                        )
+                                    }
+                                }
+
+                                upToDateVersion != null -> {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = SemanticSuccess.copy(alpha = 0.14f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = SemanticSuccess)
+                                            Text(
+                                                text = "آخرین نسخه نصب است (نسخه ${PersianNumberHelper.toPersianDigits(upToDateVersion!!)})",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = LiquidTheme.textPrimary
+                                            )
+                                        }
+                                    }
+                                }
+
+                                !checkError.isNullOrBlank() -> {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = SemanticError.copy(alpha = 0.14f)
+                                    ) {
+                                        Text(
+                                            text = checkError!!,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = SemanticError,
+                                            modifier = Modifier.padding(12.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .background(LiquidTheme.dividerColor)
+                    )
+
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .testTag("btn_update_dialog_close")
+                                .clickable { closeDialog() },
+                            Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isDownloading) "انصراف از دانلود" else "بستن",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (isDownloading) SemanticError else LiquidTheme.textSecondary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        if (actionLabel != null) {
+                            Box(
+                                Modifier
+                                    .width(0.5.dp)
+                                    .fillMaxHeight()
+                                    .background(LiquidTheme.dividerColor)
+                            )
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .testTag("btn_update_dialog_action")
+                                    .clickable {
+                                        val readyApk = downloadedFile
+                                        val update = availableUpdate
+                                        when {
+                                            readyApk != null -> handleInstallReadyApk(readyApk)
+                                            update != null -> startDownloadAndInstall(update)
+                                            else -> triggerCheck()
+                                        }
+                                    },
+                                Alignment.Center
+                            ) {
+                                Text(
+                                    text = actionLabel,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LiquidTheme.accentColor
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

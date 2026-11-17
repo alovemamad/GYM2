@@ -1,7 +1,15 @@
 package com.example.util
 
+import android.Manifest
+import android.content.ContentValues
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.example.data.local.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -19,6 +27,12 @@ data class BackupContainer(
     val measurements: List<BodyMeasurement>
 )
 
+data class BackupSaveResult(
+    val appFile: File,
+    val exportedToDownloads: Boolean,
+    val displayLocation: String
+)
+
 object BackupHelper {
 
     fun createBackupJson(
@@ -34,7 +48,7 @@ object BackupHelper {
     ): String {
         val root = JSONObject()
         root.put("app", "GYM_SMART_COACH")
-        root.put("schemaVersion", 1)
+        root.put("schemaVersion", 2)
         root.put("timestamp", System.currentTimeMillis())
 
         // Settings
@@ -50,6 +64,8 @@ object BackupHelper {
             put("mealsCount", settings.mealsCount)
             put("waterGoalMl", settings.waterGoalMl)
             put("weightUnit", settings.weightUnit)
+            put("appearanceMode", settings.appearanceMode)
+            put("accentPalette", settings.accentPalette)
             put("theme", settings.theme)
             put("workoutReminderEnabled", settings.workoutReminderEnabled)
             put("workoutReminderTime", settings.workoutReminderTime)
@@ -58,6 +74,11 @@ object BackupHelper {
             put("supplementReminderEnabled", settings.supplementReminderEnabled)
             put("supplementReminderTime", settings.supplementReminderTime)
             put("onboardingCompleted", settings.onboardingCompleted)
+            put("inAppSoundsEnabled", settings.inAppSoundsEnabled)
+            put("restTimerVolume", settings.restTimerVolume.toDouble())
+            put("timedAlarmVolume", settings.timedAlarmVolume.toDouble())
+            put("reminderVolume", settings.reminderVolume.toDouble())
+            put("githubRepo", settings.githubRepo)
         }
         root.put("settings", setObj)
 
@@ -112,6 +133,19 @@ object BackupHelper {
             })
         }
         root.put("histories", hArr)
+
+        // Skips
+        val skipArr = JSONArray()
+        skips.forEach { sk ->
+            skipArr.put(JSONObject().apply {
+                put("id", sk.id)
+                put("planId", sk.planId)
+                put("originalDate", sk.originalDate)
+                if (sk.newDate != null) put("newDate", sk.newDate)
+                put("createdAt", sk.createdAt)
+            })
+        }
+        root.put("skips", skipArr)
 
         // Supplements
         val supArr = JSONArray()
@@ -178,7 +212,8 @@ object BackupHelper {
 
     fun validateAndParseBackup(jsonString: String): Result<BackupContainer> {
         return runCatching {
-            val root = JSONObject(jsonString)
+            val cleanJson = jsonString.trim().removePrefix("\uFEFF")
+            val root = JSONObject(cleanJson)
             if (!root.has("app") || root.getString("app") != "GYM_SMART_COACH") {
                 throw IllegalArgumentException("فایل پشتیبان نامعتبر است.")
             }
@@ -197,6 +232,8 @@ object BackupHelper {
                     mealsCount = setObj.optInt("mealsCount", 4),
                     waterGoalMl = setObj.optInt("waterGoalMl", 2500),
                     weightUnit = setObj.optString("weightUnit", "kg"),
+                    appearanceMode = setObj.optString("appearanceMode", "SYSTEM"),
+                    accentPalette = setObj.optString("accentPalette", "SPORT_RED"),
                     theme = setObj.optString("theme", "DARK"),
                     workoutReminderEnabled = setObj.optBoolean("workoutReminderEnabled", false),
                     workoutReminderTime = setObj.optString("workoutReminderTime", "18:00"),
@@ -204,7 +241,12 @@ object BackupHelper {
                     waterReminderTime = setObj.optString("waterReminderTime", "10:00"),
                     supplementReminderEnabled = setObj.optBoolean("supplementReminderEnabled", false),
                     supplementReminderTime = setObj.optString("supplementReminderTime", "09:00"),
-                    onboardingCompleted = setObj.optBoolean("onboardingCompleted", true)
+                    onboardingCompleted = setObj.optBoolean("onboardingCompleted", true),
+                    inAppSoundsEnabled = setObj.optBoolean("inAppSoundsEnabled", true),
+                    restTimerVolume = setObj.optDouble("restTimerVolume", 0.8).toFloat(),
+                    timedAlarmVolume = setObj.optDouble("timedAlarmVolume", 0.9).toFloat(),
+                    reminderVolume = setObj.optDouble("reminderVolume", 0.8).toFloat(),
+                    githubRepo = setObj.optString("githubRepo", "")
                 )
             } else {
                 UserSettings()
@@ -267,6 +309,22 @@ object BackupHelper {
                         durationSeconds = o.optLong("durationSeconds", 0),
                         totalRestSecondsUsed = o.optLong("totalRestSecondsUsed", 0),
                         customData = if (o.has("customData")) o.getString("customData") else null
+                    )
+                )
+            }
+
+            // Skips
+            val skips = mutableListOf<WorkoutPlanSkip>()
+            val skArr = root.optJSONArray("skips") ?: JSONArray()
+            for (i in 0 until skArr.length()) {
+                val o = skArr.getJSONObject(i)
+                skips.add(
+                    WorkoutPlanSkip(
+                        id = o.optLong("id", 0),
+                        planId = o.getLong("planId"),
+                        originalDate = o.getString("originalDate"),
+                        newDate = if (o.has("newDate") && !o.isNull("newDate")) o.getString("newDate") else null,
+                        createdAt = o.optLong("createdAt", System.currentTimeMillis())
                     )
                 )
             }
@@ -348,7 +406,7 @@ object BackupHelper {
                 plans = plans,
                 exercises = exercises,
                 histories = histories,
-                skips = emptyList(),
+                skips = skips,
                 supplements = supplements,
                 supplementHistories = supHistories,
                 nutritionLogs = nutritionLogs,
@@ -358,9 +416,22 @@ object BackupHelper {
     }
 
     const val BACKUP_FILENAME = "gym_pro_backup.json"
+    private const val BACKUP_FOLDER_NAME = "GymPro_Backups"
+
+    fun hasLegacyStoragePermission(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            true // Android 10+ uses MediaStore / SAF with zero storage permissions
+        } else {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
 
     fun getAppBackupDirectory(context: Context): File {
-        val dir = File(context.getExternalFilesDir(null), "GymPro_Backups")
+        val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
+        val dir = File(baseDir, BACKUP_FOLDER_NAME)
         if (!dir.exists()) {
             dir.mkdirs()
         }
@@ -371,10 +442,121 @@ object BackupHelper {
         return File(getAppBackupDirectory(context), BACKUP_FILENAME)
     }
 
+    fun listBackupFilesSafely(context: Context): List<File> {
+        return try {
+            val result = mutableListOf<File>()
+            val appDir = getAppBackupDirectory(context)
+            appDir.listFiles { f -> f.isFile && f.extension.equals("json", ignoreCase = true) }
+                ?.let { result.addAll(it) }
+
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && hasLegacyStoragePermission(context)) {
+                @Suppress("DEPRECATION")
+                val pubDir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    BACKUP_FOLDER_NAME
+                )
+                if (pubDir.exists()) {
+                    pubDir.listFiles { f -> f.isFile && f.extension.equals("json", ignoreCase = true) }
+                        ?.let { files ->
+                            files.forEach { pf ->
+                                if (result.none { it.absolutePath == pf.absolutePath }) {
+                                    result.add(pf)
+                                }
+                            }
+                        }
+                }
+            }
+            result.sortedByDescending { it.lastModified() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     fun saveBackupToFile(context: Context, backupJson: String): File {
-        val file = getAppBackupFile(context)
-        file.writeText(backupJson)
-        return file
+        return saveBackupWithDetails(context, backupJson).appFile
+    }
+
+    fun saveBackupWithDetails(context: Context, backupJson: String): BackupSaveResult {
+        val appFile = getAppBackupFile(context)
+        appFile.writeText(backupJson)
+
+        val exportedToDownloads = saveToPublicDownloadsFolder(context, backupJson)
+        val displayLocation = if (exportedToDownloads) {
+            "Download/$BACKUP_FOLDER_NAME/$BACKUP_FILENAME"
+        } else {
+            "پوشه اختصاصی برنامه ($BACKUP_FOLDER_NAME/$BACKUP_FILENAME)"
+        }
+
+        return BackupSaveResult(
+            appFile = appFile,
+            exportedToDownloads = exportedToDownloads,
+            displayLocation = displayLocation
+        )
+    }
+
+    private fun saveToPublicDownloadsFolder(context: Context, backupJson: String): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = context.contentResolver
+                val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/$BACKUP_FOLDER_NAME/"
+
+                // Delete previous gym_pro_backup*.json in MediaStore owned by our app to avoid duplicates
+                try {
+                    resolver.delete(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+                        arrayOf(BACKUP_FILENAME, relativePath)
+                    )
+                } catch (_: Exception) {
+                }
+
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, BACKUP_FILENAME)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    ?: return false
+
+                resolver.openOutputStream(uri)?.use { out ->
+                    out.write(backupJson.toByteArray(Charsets.UTF_8))
+                } ?: return false
+
+                contentValues.clear()
+                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+                true
+            } else {
+                if (!hasLegacyStoragePermission(context)) return false
+                @Suppress("DEPRECATION")
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val targetDir = File(downloadsDir, BACKUP_FOLDER_NAME)
+                if (!targetDir.exists()) targetDir.mkdirs()
+                val targetFile = File(targetDir, BACKUP_FILENAME)
+                targetFile.writeText(backupJson)
+                true
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun writeBackupToUri(context: Context, uri: Uri, backupJson: String): Result<Unit> {
+        return runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(backupJson.toByteArray(Charsets.UTF_8))
+            } ?: throw IllegalStateException("امکان نوشتن در مسیر انتخاب‌شده وجود ندارد.")
+        }
+    }
+
+    fun getShareUri(context: Context, file: File): Uri {
+        return FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
     }
 
     fun getExistingBackupFile(context: Context): File? {
@@ -392,7 +574,7 @@ object BackupHelper {
     fun readBackupFromUri(context: Context, uri: Uri): Result<BackupContainer> {
         return runCatching {
             val json = context.contentResolver.openInputStream(uri)?.use { stream ->
-                stream.bufferedReader().readText()
+                stream.bufferedReader(Charsets.UTF_8).readText()
             } ?: throw IllegalArgumentException("امکان باز کردن فایل انتخاب‌شده وجود ندارد.")
             validateAndParseBackup(json).getOrThrow()
         }

@@ -174,6 +174,12 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setGithubRepo(repo: String) {
+        viewModelScope.launch {
+            repository.setGithubRepo(repo)
+        }
+    }
+
     // Reminder toggles
     fun toggleReminder(type: String, enabled: Boolean, timeStr: String) {
         viewModelScope.launch {
@@ -222,12 +228,21 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
 
     fun triggerTestNotification() {
         val app = getApplication<Application>()
+        val soundConfig = SoundPrefsCache.get(app)
+        val shouldBeSilent = !soundConfig.inAppSoundsEnabled || soundConfig.reminderVolume <= 0.01f
+        val useCustomVol = !shouldBeSilent && soundConfig.reminderVolume < 0.98f
+
+        if (useCustomVol) {
+            NotificationHelper.playAlarmSoundAndVibrate(app, com.example.util.AlertType.WORKOUT)
+        }
+
         NotificationHelper.showNotification(
             context = app,
             notificationId = 999,
             channelId = NotificationHelper.CHANNEL_REMINDERS,
             title = "اعلان تستی GYM",
-            message = "سیستم اعلان‌ها و یادآورها به درستی فعال است!"
+            message = "سیستم اعلان‌ها و یادآورها به درستی فعال است!",
+            silent = shouldBeSilent || useCustomVol
         )
     }
 

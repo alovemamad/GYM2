@@ -1,7 +1,6 @@
 package com.example.ui.components
 
 import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -23,13 +22,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.input.pointer.PointerEventPass
-import kotlinx.coroutines.delay
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -70,43 +62,8 @@ val LocalHazeState = compositionLocalOf<HazeState?> { null }
 // ==========================================
 
 /**
- * شکست نور مایع (AGSL، اندروید ۱۳+): امواج آرام روی تصویر پس‌زمینه + لنز بزرگ‌نما زیر انگشت.
- * شیشه‌ها این تصویر را بلور می‌کنند و در نتیجه درون کارت‌ها «مایع» جاری دیده می‌شود.
- */
-@RequiresApi(33)
-private class LiquidRefraction {
-    private val shader = android.graphics.RuntimeShader(
-        """
-        uniform shader content;
-        uniform float time;
-        half4 main(float2 p) {
-            float2 w = float2(
-                sin(p.y * 0.010 + time) + sin(p.y * 0.023 - time * 2.0) * 0.5,
-                cos(p.x * 0.009 + time) + cos(p.x * 0.021 + time * 2.0) * 0.5
-            );
-            float2 q = p + w * 22.0;
-            q += float2(sin(q.y * 0.017 - time), cos(q.x * 0.015 + time)) * 14.0;
-            return content.eval(q);
-        }
-        """.trimIndent()
-    )
-
-    fun effect(time: Float): RenderEffect {
-        shader.setFloatUniform("time", time)
-        return android.graphics.RenderEffect
-            .createRuntimeShaderEffect(shader, "content")
-            .asComposeRenderEffect()
-    }
-}
-
-// فاز زمانی مشترک برای حرکت آرام نور و جلوه‌های مایع (۰..۱ تکرارشونده)
-val LocalGlassPhase = compositionLocalOf<State<Float>> { mutableStateOf(0f) }
-
-/**
- * Root container. دو لایه‌ی پس‌زمینه:
- *  ۱) لایه‌ی منبعِ شیشه (زیر haze): همان عکس برگ‌ها با چرخش مایع مرمری — شیشه‌ها این را بلور می‌کنند،
- *     پس درون کارت‌ها مثل ویدیوی مرجع «مایعِ جاری» دیده می‌شود.
- *  ۲) روی آن، همان عکس ثابت و واضح؛ بنابراین بیرون از شیشه پس‌زمینه ساکن و شفاف می‌ماند.
+ * Root container providing the signature botanical organic backdrop and Haze blur context.
+ * Matches Snipzy Live Preview screenshots exactly.
  */
 @Composable
 fun LiquidGlassRoot(
@@ -114,140 +71,129 @@ fun LiquidGlassRoot(
     content: @Composable () -> Unit
 ) {
     val isDark = LiquidTheme.isDark
-    val accent = LiquidTheme.accentColor
-    val palette = LiquidTheme.palette
-    val bgTint = if (isDark) Color.Black.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.12f)
-    val paletteWash = Brush.verticalGradient(
-        listOf(
-            accent.copy(alpha = if (isDark) 0.30f else 0.22f),
-            Color.Transparent,
-            palette.gradientEnd.copy(alpha = if (isDark) 0.30f else 0.14f)
+    val paletteStart by animateColorAsState(
+        targetValue = LiquidTheme.palette.gradientStart,
+        animationSpec = tween(durationMillis = 450),
+        label = "bg_palette_start"
+    )
+    val paletteEnd by animateColorAsState(
+        targetValue = LiquidTheme.palette.gradientEnd,
+        animationSpec = tween(durationMillis = 450),
+        label = "bg_palette_end"
+    )
+    val paletteAccent by animateColorAsState(
+        targetValue = LiquidTheme.accentColor,
+        animationSpec = tween(durationMillis = 450),
+        label = "bg_palette_accent"
+    )
+
+    val atmosphericBrush = if (isDark) {
+        Brush.verticalGradient(
+            colors = listOf(
+                paletteEnd.copy(alpha = 0.62f),
+                Color.Black.copy(alpha = 0.50f),
+                paletteAccent.copy(alpha = 0.24f)
+            )
         )
-    )
-
-    val transition = rememberInfiniteTransition(label = "glass_phase")
-    val phase = transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(16000, easing = LinearEasing)),
-        label = "phase"
-    )
-
-    val refraction: Any? = remember {
-        if (Build.VERSION.SDK_INT >= 33) {
-            try { LiquidRefraction() } catch (_: Throwable) { null }
-        } else null
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.66f),
+                paletteStart.copy(alpha = 0.22f),
+                Color.White.copy(alpha = 0.58f)
+            )
+        )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // ۱) منبع شیشه (چرخش مایع)
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Dedicated background sibling that captures the botanical texture & palette atmosphere for Haze
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .haze(state = hazeState)
         ) {
+            // High-resolution botanical foliage background (matching Snipzy live preview)
             Image(
                 painter = painterResource(id = R.drawable.img_liquid_glass_bg),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            // Dynamic palette-reactive atmospheric depth overlay
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = 1.14f
-                        scaleY = 1.14f
-                        if (Build.VERSION.SDK_INT >= 33 && refraction != null) {
-                            renderEffect = (refraction as LiquidRefraction)
-                                .effect(phase.value * 4f * PI.toFloat())
-                        }
-                    }
+                    .background(atmosphericBrush)
             )
-            Box(modifier = Modifier.fillMaxSize().background(bgTint))
-            Box(modifier = Modifier.fillMaxSize().background(paletteWash))
         }
 
-        // ۲) پس‌زمینه‌ی ثابت و واضح (بالای منبع، زیر محتوا)
-        Image(
-            painter = painterResource(id = R.drawable.img_liquid_glass_bg),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = 1.14f
-                    scaleY = 1.14f
-                }
-        )
-        Box(modifier = Modifier.fillMaxSize().background(bgTint))
-        Box(modifier = Modifier.fillMaxSize().background(paletteWash))
-
-        Box(modifier = Modifier.fillMaxSize()) {
-            CompositionLocalProvider(
-                LocalHazeState provides hazeState,
-                LocalGlassPhase provides phase
-            ) {
+        // Foreground content sibling (contains all liquid glass components)
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CompositionLocalProvider(LocalHazeState provides hazeState) {
                 content()
             }
         }
     }
 }
 
-/** ورود نرم بدون شفافیت صفر (تا هیچ‌وقت فریم خالی دیده نشود): فقط کمی بالا آمدن و بزرگ شدن فنری. */
-@Composable
-fun Modifier.liquidAppear(delayMs: Int = 0): Modifier {
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        delay(delayMs.toLong())
-        progress.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 320f))
-    }
-    return this.graphicsLayer {
-        val p = progress.value
-        translationY = (1f - p) * 18f
-        val sc = 0.975f + 0.025f * p
-        scaleX = sc
-        scaleY = sc
-    }
-}
-
 /**
  * Primary Liquid Glass modifier based on Snipzy CSS liquid glass design:
  * - Backdrop blur with Haze (16dp)
- * - Translucent overlay tint (--bg-color: rgba(255, 255, 255, 0.22) / rgba(0, 0, 0, 0.25))
- * - Specular highlight gradient border (inset 1px 1px 1px highlight: 0.85 alpha on top-left)
+ * - Translucent overlay tint reactive to appearance mode & active palette
+ * - Specular highlight gradient border tinted with active accent color
  * - Inset vertical reflection sheen
- * - Soft ambient shadow (box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35))
+ * - Soft ambient shadow
  */
 @Composable
 fun Modifier.liquidGlass(
     hazeState: HazeState? = LocalHazeState.current,
     shape: Shape = RoundedCornerShape(22.dp),
-    tintAlpha: Float = if (LiquidTheme.isDark) 0.34f else 0.24f,
+    tintAlpha: Float = if (LiquidTheme.isDark) 0.24f else 0.56f,
     elevation: Dp = 8.dp,
-    borderAlpha: Float = if (LiquidTheme.isDark) 0.80f else 0.90f,
-    accentTintAlpha: Float = 0.06f
+    borderAlpha: Float = if (LiquidTheme.isDark) 0.72f else 0.88f
 ): Modifier {
     val isDark = LiquidTheme.isDark
     val accent = LiquidTheme.accentColor
-    // شیشه‌ی سبزِ تیره‌ی نیمه‌شفاف مثل ویدیوی مرجع
-    val bgColor = if (isDark) Color(0xFF0B1A10).copy(alpha = tintAlpha) else Color.White.copy(alpha = tintAlpha)
+    val paletteStart = LiquidTheme.palette.gradientStart
+    val bgColor = if (isDark) {
+        Color(0xFF0A0F14).copy(alpha = tintAlpha)
+    } else {
+        Color.White.copy(alpha = tintAlpha)
+    }
 
-    // لبه‌ی نازک و ظریف: کمی روشن در گوشه‌ی بالا-چپ، تقریباً نامرئی در بقیه
+    // Specular border gradient: bright highlight fading into active palette accent edge
     val borderBrush = Brush.linearGradient(
         colors = listOf(
-            Color.White.copy(alpha = borderAlpha * 0.42f),
-            Color.White.copy(alpha = 0.07f),
-            Color.White.copy(alpha = 0.07f),
-            Color.White.copy(alpha = borderAlpha * 0.22f)
+            Color.White.copy(alpha = borderAlpha),
+            accent.copy(alpha = if (isDark) 0.42f else 0.35f),
+            Color.White.copy(alpha = 0.14f),
+            paletteStart.copy(alpha = if (isDark) 0.30f else 0.22f)
         ),
         start = Offset(0f, 0f),
         end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+    )
+
+    // Inner glossy reflection sheen
+    val innerSpecularBrush = Brush.verticalGradient(
+        colors = listOf(
+            Color.White.copy(alpha = if (isDark) 0.14f else 0.28f),
+            accent.copy(alpha = 0.04f),
+            Color.Transparent
+        ),
+        startY = 0f,
+        endY = 120f
     )
 
     return this
         .shadow(
             elevation = elevation,
             shape = shape,
-            spotColor = Color.Black.copy(alpha = 0.22f),
-            ambientColor = Color.Black.copy(alpha = 0.12f)
+            spotColor = accent.copy(alpha = 0.28f),
+            ambientColor = Color.Black.copy(alpha = 0.20f)
         )
         .clip(shape)
         .then(
@@ -257,25 +203,16 @@ fun Modifier.liquidGlass(
                     style = HazeStyle(
                         backgroundColor = bgColor,
                         tints = emptyList(),
-                        blurRadius = 22.dp,
-                        noiseFactor = 0.03f
+                        blurRadius = 16.dp,
+                        noiseFactor = 0.04f
                     )
                 )
             } else {
                 Modifier.background(bgColor)
             }
         )
-        .drawBehind {
-            // رنگ پالت روی شیشه
-            drawRect(accent.copy(alpha = accentTintAlpha))
-            // تیره شدن نرم لبه‌ها (شکست نور در لبه‌ی شیشه، مثل ویدیو)
-            val outline = shape.createOutline(size, layoutDirection, this)
-            val ring = minOf(8.dp.toPx(), minOf(size.width, size.height) * 0.2f)
-            drawOutline(outline, Color.Black.copy(alpha = 0.09f), style = Stroke(width = ring * 2f))
-            drawOutline(outline, Color.Black.copy(alpha = 0.09f), style = Stroke(width = ring * 1.2f))
-            drawOutline(outline, Color.Black.copy(alpha = 0.09f), style = Stroke(width = ring * 0.6f))
-        }
-        .border(BorderStroke(0.9.dp, borderBrush), shape = shape)
+        .background(innerSpecularBrush)
+        .border(BorderStroke(1.2.dp, borderBrush), shape = shape)
 }
 
 /**
@@ -290,16 +227,12 @@ fun Modifier.liquidTapEffect(
     val haptic = LocalHapticFeedback.current
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.95f else 1f,
-        animationSpec = spring(dampingRatio = 0.42f, stiffness = 420f),
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
         label = "liquid_tap"
     )
 
     return if (!enabled) this else this
-        .graphicsLayer {
-            // حالت ژله‌ای: موقع لمس کمی پهن‌تر و کوتاه‌تر می‌شود
-            scaleX = 1f + (1f - scale) * 0.6f
-            scaleY = scale
-        }
+        .scale(scale)
         .pointerInput(Unit) {
             detectTapGestures(
                 onPress = {
@@ -328,7 +261,6 @@ fun SolidGroupedCard(
 ) {
     Box(
         modifier = modifier
-            .liquidAppear()
             .fillMaxWidth()
             .liquidGlass(hazeState = hazeState, shape = shape, elevation = 6.dp)
     ) {
@@ -484,7 +416,7 @@ fun GroupedRow(
                     .fillMaxWidth()
                     .padding(start = if (icon != null) 72.dp else 16.dp)
                     .height(0.5.dp)
-                    .background(Color.White.copy(alpha = if (LiquidTheme.isDark) 0.08f else 0.15f))
+                    .background(LiquidTheme.dividerColor)
             )
         }
     }
@@ -702,6 +634,16 @@ fun LiquidPrimaryButton(
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 500f),
         label = "btn_scale"
     )
+    val accent = LiquidTheme.accentColor
+    val paletteStart = LiquidTheme.palette.gradientStart
+    val contentColor = onColorFor(paletteStart)
+
+    val buttonBrush = Brush.linearGradient(
+        colors = listOf(
+            paletteStart.copy(alpha = if (enabled) 0.88f else 0.40f),
+            accent.copy(alpha = if (enabled) 0.78f else 0.35f)
+        )
+    )
 
     Box(
         modifier = modifier
@@ -712,14 +654,15 @@ fun LiquidPrimaryButton(
                 shape = CircleShape,
                 elevation = if (isPressed) 2.dp else 8.dp,
                 tintAlpha = 0.20f,
-                borderAlpha = 0.90f,
-                accentTintAlpha = 0.0f
+                borderAlpha = 0.90f
             )
-            .background(
-                Brush.verticalGradient(
+            .background(buttonBrush, CircleShape)
+            .border(
+                1.dp,
+                Brush.linearGradient(
                     listOf(
-                        LiquidTheme.accentColor.copy(alpha = if (enabled) 0.70f else 0.30f),
-                        LiquidTheme.accentColor.copy(alpha = if (enabled) 0.42f else 0.16f)
+                        Color.White.copy(alpha = 0.75f),
+                        accent.copy(alpha = 0.85f)
                     )
                 ),
                 CircleShape
@@ -741,7 +684,7 @@ fun LiquidPrimaryButton(
                 Icon(
                     icon,
                     null,
-                    tint = LiquidTheme.onAccent,
+                    tint = contentColor,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(Modifier.width(8.dp))
@@ -750,7 +693,7 @@ fun LiquidPrimaryButton(
                 text,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = LiquidTheme.onAccent
+                color = contentColor
             )
         }
     }
@@ -883,12 +826,12 @@ fun LiquidSegmentedControl(
                         .clip(RoundedCornerShape(20.dp))
                         .background(
                             if (isSelected) {
-                                if (LiquidTheme.isDark) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.85f)
+                                LiquidTheme.accentColor.copy(alpha = if (LiquidTheme.isDark) 0.24f else 0.18f)
                             } else Color.Transparent
                         )
                         .border(
-                            if (isSelected) 0.5.dp else 0.dp,
-                            if (isSelected) Color.White.copy(alpha = 0.4f) else Color.Transparent,
+                            if (isSelected) 1.dp else 0.dp,
+                            if (isSelected) LiquidTheme.accentColor.copy(alpha = 0.72f) else Color.Transparent,
                             RoundedCornerShape(20.dp)
                         )
                         .clickable { onSelectIndex(index) },
@@ -1127,26 +1070,37 @@ fun LiquidSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // پیشرفت ۰..۱ با فنر نرم؛ دستگیره‌ی شیشه‌ای وسط حرکت کشیده می‌شود (حس مایع)
-    val progress by animateFloatAsState(
-        targetValue = if (checked) 1f else 0f,
-        animationSpec = spring(dampingRatio = 0.58f, stiffness = 330f),
-        label = "switch_progress"
+    val thumbOffset by animateFloatAsState(
+        targetValue = if (checked) 22f else 0f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f),
+        label = "switch_thumb"
     )
-    val stretch = (sin(progress.coerceIn(0f, 1f) * PI.toFloat()) * 12f)
-    val thumbWidth = 26f + stretch
-    val thumbOffset = progress * 22f - stretch / 2f
+
+    val accent = LiquidTheme.accentColor
+    val trackBrush = if (checked) {
+        Brush.horizontalGradient(
+            listOf(
+                LiquidTheme.palette.gradientStart.copy(alpha = 0.85f),
+                accent.copy(alpha = 0.90f)
+            )
+        )
+    } else {
+        val offColor = if (LiquidTheme.isDark) Color.Black.copy(alpha = 0.28f) else Color.Black.copy(alpha = 0.14f)
+        Brush.horizontalGradient(listOf(offColor, offColor))
+    }
+
+    val borderColor = if (checked) {
+        accent
+    } else {
+        if (LiquidTheme.isDark) Color.White.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.22f)
+    }
 
     Box(
         modifier = modifier
             .size(54.dp, 32.dp)
-            .liquidGlass(
-                shape = CircleShape,
-                elevation = 0.dp,
-                tintAlpha = if (checked) 0.30f else 0.24f,
-                borderAlpha = 0.9f,
-                accentTintAlpha = if (checked) 0.34f else 0f
-            )
+            .clip(CircleShape)
+            .background(trackBrush)
+            .border(1.2.dp, borderColor, CircleShape)
             .clickable { onCheckedChange(!checked) }
             .padding(3.dp),
         contentAlignment = Alignment.CenterStart
@@ -1154,15 +1108,10 @@ fun LiquidSwitch(
         Box(
             Modifier
                 .offset(x = thumbOffset.dp)
-                .size(width = thumbWidth.dp, height = 26.dp)
-                .shadow(3.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
-                .background(
-                    Brush.radialGradient(
-                        listOf(Color.White.copy(alpha = 0.97f), Color.White.copy(alpha = 0.78f))
-                    ),
-                    CircleShape
-                )
-                .border(0.6.dp, Color.White.copy(alpha = 0.55f), CircleShape)
+                .size(26.dp)
+                .shadow(4.dp, CircleShape)
+                .background(Color.White.copy(alpha = 0.96f), CircleShape)
+                .border(0.5.dp, Color.White, CircleShape)
         )
     }
 }
@@ -1356,25 +1305,26 @@ fun LiquidBottomBar(
         ) {
             com.example.ui.navigation.Screen.bottomNavItems.forEach { screen ->
                 val selected = currentRoute == screen.route
-                val selBg by animateColorAsState(
-                    if (selected) LiquidTheme.accentColor.copy(alpha = 0.42f) else Color.Transparent,
-                    spring(stiffness = 300f), label = "nav_bg"
-                )
-                val selBorder by animateColorAsState(
-                    if (selected) Color.White.copy(alpha = 0.6f) else Color.Transparent,
-                    spring(stiffness = 300f), label = "nav_border"
-                )
-                val iconScale by animateFloatAsState(
-                    if (selected) 1.18f else 1f,
-                    spring(dampingRatio = 0.45f, stiffness = 380f), label = "nav_scale"
+                val accent = LiquidTheme.accentColor
+                val selectedBrush = Brush.linearGradient(
+                    listOf(
+                        LiquidTheme.palette.gradientStart.copy(alpha = if (LiquidTheme.isDark) 0.34f else 0.22f),
+                        accent.copy(alpha = if (LiquidTheme.isDark) 0.24f else 0.16f)
+                    )
                 )
                 Box(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(28.dp))
-                        .background(selBg)
-                        .border(1.dp, selBorder, RoundedCornerShape(28.dp))
+                        .then(
+                            if (selected) Modifier.background(selectedBrush) else Modifier
+                        )
+                        .border(
+                            if (selected) 1.2.dp else 0.dp,
+                            if (selected) accent.copy(alpha = 0.85f) else Color.Transparent,
+                            RoundedCornerShape(28.dp)
+                        )
                         .clickable { onNavigate(screen.route) },
                     contentAlignment = Alignment.Center
                 ) {
@@ -1385,14 +1335,14 @@ fun LiquidBottomBar(
                         Icon(
                             if (selected) screen.selectedIcon else screen.unselectedIcon,
                             screen.title,
-                            tint = if (selected) Color.White else Color.White.copy(alpha = 0.65f),
-                            modifier = Modifier.size(24.dp).scale(iconScale)
+                            tint = if (selected) accent else LiquidTheme.textSecondary,
+                            modifier = Modifier.size(24.dp)
                         )
                         Text(
                             screen.title,
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) Color.White else Color.White.copy(alpha = 0.65f)
+                            color = if (selected) accent else LiquidTheme.textSecondary
                         )
                     }
                 }
@@ -1423,7 +1373,6 @@ fun LiquidTopBar(
                 .liquidGlass(
                     shape = RoundedCornerShape(28.dp),
                     elevation = 6.dp,
-                    tintAlpha = 0.24f,
                     borderAlpha = 0.75f
                 )
                 .padding(horizontal = 12.dp),
@@ -1447,7 +1396,7 @@ fun LiquidTopBar(
                     title,
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = 19.sp),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = LiquidTheme.textPrimary,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1456,7 +1405,7 @@ fun LiquidTopBar(
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.8f),
+                        color = LiquidTheme.accentColor,
                         textAlign = TextAlign.Center,
                         maxLines = 1
                     )
@@ -1537,7 +1486,7 @@ fun LiquidAlertDialog(
                         Modifier
                             .fillMaxWidth()
                             .height(0.5.dp)
-                            .background(Color.White.copy(alpha = 0.15f))
+                            .background(LiquidTheme.dividerColor)
                     )
 
                     Row(
@@ -1563,7 +1512,7 @@ fun LiquidAlertDialog(
                                 Modifier
                                     .width(0.5.dp)
                                     .fillMaxHeight()
-                                    .background(Color.White.copy(alpha = 0.15f))
+                                    .background(LiquidTheme.dividerColor)
                             )
                         }
                         Box(

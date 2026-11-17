@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,12 +56,11 @@ fun WorkoutsScreen(
     onGetPlanExercises: suspend (Long) -> List<WorkoutExercise>,
     onDuplicateAllPlans: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: برنامه‌ها, 1: تاریخچه
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0: برنامه‌ها, 1: تاریخچه
     var searchQuery by remember { mutableStateOf("") }
     var planToReschedule by remember { mutableStateOf<WorkoutPlan?>(null) }
     var planToDelete by remember { mutableStateOf<WorkoutPlan?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
-    var showDuplicateAllDialog by remember { mutableStateOf(false) }
     var importJsonText by remember { mutableStateOf("") }
 
     val context = LocalContext.current
@@ -182,13 +182,6 @@ fun WorkoutsScreen(
                             SwipeablePlanCard(
                                 onDelete = { planToDelete = plan },
                                 onEdit = { onEditPlan(plan) },
-                                onShare = {
-                                    coroutineScope.launch {
-                                        val exercises = onGetPlanExercises(plan.id)
-                                        PlanShareHelper.sharePlan(context, plan, exercises)
-                                    }
-                                },
-                                onReschedule = { planToReschedule = plan },
                                 onCopyText = {
                                     coroutineScope.launch {
                                         val exercises = onGetPlanExercises(plan.id)
@@ -205,7 +198,6 @@ fun WorkoutsScreen(
                                     badgeText = "شروع نوبت",
                                     gradient = LiquidTheme.cardGradient,
                                     onClick = { onStartWorkout(plan) }
-                                
                                 )
                             }
                         }
@@ -223,12 +215,6 @@ fun WorkoutsScreen(
                             SwipeablePlanCard(
                                 onDelete = { planToDelete = plan },
                                 onEdit = { onEditPlan(plan) },
-                                onShare = {
-                                    coroutineScope.launch {
-                                        val exercises = onGetPlanExercises(plan.id)
-                                        PlanShareHelper.sharePlan(context, plan, exercises)
-                                    }
-                                },
                                 onCopyText = {
                                     coroutineScope.launch {
                                         val exercises = onGetPlanExercises(plan.id)
@@ -242,11 +228,8 @@ fun WorkoutsScreen(
                                     title = plan.name,
                                     subtitle = "روزهای اجرا: ${plan.scheduledDay}",
                                     icon = Icons.Filled.FitnessCenter,
-                                    gradient = Brush.linearGradient(
-                                        listOf(LiquidTheme.surfaceElevated, LiquidTheme.surfaceSolid)
-                                    ),
+                                    gradient = LiquidTheme.cardGradient,
                                     onClick = { onStartWorkout(plan) }
-                                
                                 )
                             }
                         }
@@ -399,48 +382,6 @@ fun WorkoutsScreen(
             }
         )
     }
-
-    // Duplicate All Plans Confirmation Dialog
-    if (showDuplicateAllDialog) {
-        LiquidAlertDialog(
-            onDismissRequest = { showDuplicateAllDialog = false },
-            title = "کپی کردن تمامی برنامه‌ها",
-            message = "آیا می‌خواهید از تمام ${PersianNumberHelper.toPersianDigits(allPlans.size)} برنامه‌ی موجود یک نسخه کپی ایجاد کنید؟",
-            confirmText = "بله، همه را کپی کن",
-            dismissText = "انصراف",
-            onConfirm = {
-                onDuplicateAllPlans()
-                Toast.makeText(context, "تمام برنامه‌ها با موفقیت کپی شدند.", Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
-}
-
-@Composable
-private fun SwipeAction(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    tint: androidx.compose.ui.graphics.Color,
-    bg: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .width(58.dp)
-            .fillMaxHeight()
-            .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier.size(38.dp).clip(CircleShape).background(bg),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(18.dp))
-        }
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(text = label, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, color = tint, maxLines = 1)
-    }
 }
 
 @Composable
@@ -448,23 +389,20 @@ fun SwipeablePlanCard(
     onDelete: () -> Unit,
     onEdit: () -> Unit,
     onCopyText: () -> Unit,
-    onShare: (() -> Unit)? = null,
-    onReschedule: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
-    val actionCount = 3 + (if (onShare != null) 1 else 0) + (if (onReschedule != null) 1 else 0)
-    val revealWidth = (58 * actionCount + 8).dp
+    val revealWidth = 200.dp
     val revealPx = with(density) { revealWidth.toPx() }
     val offsetX = remember { Animatable(0f) }
     val coroutineScope = rememberCoroutineScope()
-    fun close() { coroutineScope.launch { offsetX.animateTo(0f, androidx.compose.animation.core.spring(0.7f, 400f)) } }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
     ) {
+        // Actions row revealed on swipe to the RIGHT (placed on the start/left edge)
         Row(
             modifier = Modifier
                 .matchParentSize()
@@ -473,29 +411,135 @@ fun SwipeablePlanCard(
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SwipeAction("ویرایش", Icons.Filled.Edit, LiquidTheme.accentColor, LiquidTheme.accentColor.copy(alpha = 0.18f)) { close(); onEdit() }
-            SwipeAction("حذف", Icons.Filled.Delete, SemanticError, SemanticError.copy(alpha = 0.18f)) { close(); onDelete() }
-            SwipeAction("کپی متن", Icons.Filled.ContentCopy, LiquidTheme.textPrimary, LiquidTheme.surfaceSolid) { close(); onCopyText() }
-            if (onShare != null) SwipeAction("اشتراک", Icons.Filled.Share, LiquidTheme.accentColor, LiquidTheme.accentColor.copy(alpha = 0.18f)) { close(); onShare() }
-            if (onReschedule != null) SwipeAction("تعویق", Icons.Filled.EventBusy, SemanticWarning, SemanticWarning.copy(alpha = 0.18f)) { close(); onReschedule() }
+            // 1. Edit (Pencil)
+            Column(
+                modifier = Modifier
+                    .width(62.dp)
+                    .fillMaxHeight()
+                    .clickable {
+                        coroutineScope.launch { offsetX.animateTo(0f) }
+                        onEdit()
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(LiquidTheme.accentColor.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = "ویرایش برنامه",
+                        tint = LiquidTheme.accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "ویرایش",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = LiquidTheme.accentColor
+                )
+            }
+
+            // 2. Delete (Trash)
+            Column(
+                modifier = Modifier
+                    .width(62.dp)
+                    .fillMaxHeight()
+                    .clickable {
+                        coroutineScope.launch { offsetX.animateTo(0f) }
+                        onDelete()
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(SemanticError.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "حذف برنامه",
+                        tint = SemanticError,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "حذف",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = SemanticError
+                )
+            }
+
+            // 3. Copy text
+            Column(
+                modifier = Modifier
+                    .width(62.dp)
+                    .fillMaxHeight()
+                    .clickable {
+                        coroutineScope.launch { offsetX.animateTo(0f) }
+                        onCopyText()
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(LiquidTheme.surfaceSolid),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.ContentCopy,
+                        contentDescription = "کپی متن برنامه",
+                        tint = LiquidTheme.textPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "کپی متن",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = LiquidTheme.textPrimary
+                )
+            }
         }
 
+        // Foreground Card content that slides to the right
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-                .pointerInput(revealPx) {
+                .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             coroutineScope.launch {
-                                if (offsetX.value > revealPx / 3) offsetX.animateTo(revealPx, androidx.compose.animation.core.spring(0.7f, 400f))
-                                else offsetX.animateTo(0f, androidx.compose.animation.core.spring(0.7f, 400f))
+                                if (offsetX.value > revealPx / 3) {
+                                    offsetX.animateTo(revealPx)
+                                } else {
+                                    offsetX.animateTo(0f)
+                                }
                             }
                         },
-                        onDragCancel = { close() },
+                        onDragCancel = {
+                            coroutineScope.launch { offsetX.animateTo(0f) }
+                        },
                         onHorizontalDrag = { _, dragAmount ->
                             coroutineScope.launch {
-                                offsetX.snapTo((offsetX.value + dragAmount).coerceIn(0f, revealPx))
+                                val newOffset = (offsetX.value + dragAmount).coerceIn(0f, revealPx)
+                                offsetX.snapTo(newOffset)
                             }
                         }
                     )

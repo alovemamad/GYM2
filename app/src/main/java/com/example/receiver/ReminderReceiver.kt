@@ -3,6 +3,8 @@ package com.example.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import com.example.data.local.SoundPrefsCache
+import com.example.util.AlertType
 import com.example.util.NotificationHelper
 import com.example.util.ReminderScheduler
 
@@ -25,17 +27,29 @@ class ReminderReceiver : BroadcastReceiver() {
         val isDaily = intent.getBooleanExtra(EXTRA_IS_DAILY, false)
         val timeStr = intent.getStringExtra(EXTRA_TIME_STR)
 
-        // Show the notification and play the alert at the user's chosen volume
-        val pending = goAsync()
-        val finish = { try { pending.finish() } catch (_: Exception) {} }
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(finish, 6000)
+        val soundConfig = SoundPrefsCache.get(context)
+        val alertType = AlertType.fromChannel(channel)
+        val targetVolume = when (alertType) {
+            AlertType.REST_END -> soundConfig.restTimerVolume
+            AlertType.EXERCISE_END -> soundConfig.timedAlarmVolume
+            AlertType.WORKOUT, AlertType.WATER, AlertType.SUPPLEMENT -> soundConfig.reminderVolume
+        }
+
+        val shouldBeSilent = !soundConfig.inAppSoundsEnabled || targetVolume <= 0.01f
+        val useCustomVolumePlayer = !shouldBeSilent && targetVolume < 0.98f
+
+        if (useCustomVolumePlayer) {
+            NotificationHelper.playAlarmSoundAndVibrate(context, alertType)
+        }
+
+        // Show notification (silent if muted or already played at custom slider volume)
         NotificationHelper.showNotification(
             context = context,
             notificationId = id,
             channelId = channel,
             title = title,
             message = message,
-            onSoundDone = finish
+            silent = shouldBeSilent || useCustomVolumePlayer
         )
 
         // If it's a repeating daily alarm, schedule next day's alarm
