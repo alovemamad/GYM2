@@ -54,7 +54,11 @@ fun WorkoutsScreen(
     onDeleteHistory: (Long) -> Unit,
     onImportPlanJson: (String) -> Unit,
     onGetPlanExercises: suspend (Long) -> List<WorkoutExercise>,
-    onDuplicateAllPlans: () -> Unit
+    onDuplicateAllPlans: () -> Unit,
+    isWorkoutActive: Boolean = false,
+    activeWorkoutPlanId: Long? = null,
+    activeWorkoutPlanName: String = "",
+    onResumeActiveWorkout: () -> Unit = {}
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0: برنامه‌ها, 1: تاریخچه
     var searchQuery by remember { mutableStateOf("") }
@@ -159,6 +163,21 @@ fun WorkoutsScreen(
         }
 
         if (selectedTab == 0) {
+            if (isWorkoutActive) {
+                item(key = "active_workout_resume_banner") {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        ContentRow(
+                            title = activeWorkoutPlanName.ifBlank { "تمرین در حال اجرا" },
+                            subtitle = "بازگشت به جلسه فعال بدون از دست رفتن ست‌ها",
+                            icon = Icons.Filled.PlayArrow,
+                            badgeText = "ادامه تمرین",
+                            gradient = LiquidTheme.cardGradient,
+                            onClick = onResumeActiveWorkout
+                        )
+                    }
+                }
+            }
+
             // Plans Tab
             if (filteredPlans.isEmpty()) {
                 item {
@@ -178,6 +197,7 @@ fun WorkoutsScreen(
                     }
 
                     items(todayPlans, key = { "today_${it.id}" }) { plan ->
+                        val isRunning = isWorkoutActive && plan.id == activeWorkoutPlanId
                         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                             SwipeablePlanCard(
                                 onDelete = { planToDelete = plan },
@@ -193,11 +213,11 @@ fun WorkoutsScreen(
                             ) {
                                 ContentRow(
                                     title = plan.name,
-                                    subtitle = "برنامه امروز • ${plan.scheduledDay}",
+                                    subtitle = if (isRunning) "در حال اجرا • لمس برای ادامه ست‌ها" else "برنامه امروز • ${plan.scheduledDay}",
                                     icon = Icons.Filled.PlayArrow,
-                                    badgeText = "شروع نوبت",
+                                    badgeText = if (isRunning) "در حال اجرا" else "شروع نوبت",
                                     gradient = LiquidTheme.cardGradient,
-                                    onClick = { onStartWorkout(plan) }
+                                    onClick = { if (isRunning) onResumeActiveWorkout() else onStartWorkout(plan) }
                                 )
                             }
                         }
@@ -211,6 +231,7 @@ fun WorkoutsScreen(
                     }
 
                     items(otherPlans, key = { "other_${it.id}" }) { plan ->
+                        val isRunning = isWorkoutActive && plan.id == activeWorkoutPlanId
                         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                             SwipeablePlanCard(
                                 onDelete = { planToDelete = plan },
@@ -226,10 +247,11 @@ fun WorkoutsScreen(
                             ) {
                                 ContentRow(
                                     title = plan.name,
-                                    subtitle = "روزهای اجرا: ${plan.scheduledDay}",
-                                    icon = Icons.Filled.FitnessCenter,
+                                    subtitle = if (isRunning) "در حال اجرا • لمس برای ادامه ست‌ها" else "روزهای اجرا: ${plan.scheduledDay}",
+                                    icon = if (isRunning) Icons.Filled.PlayArrow else Icons.Filled.FitnessCenter,
+                                    badgeText = if (isRunning) "در حال اجرا" else null,
                                     gradient = LiquidTheme.cardGradient,
-                                    onClick = { onStartWorkout(plan) }
+                                    onClick = { if (isRunning) onResumeActiveWorkout() else onStartWorkout(plan) }
                                 )
                             }
                         }

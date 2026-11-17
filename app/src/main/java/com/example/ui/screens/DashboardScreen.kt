@@ -46,7 +46,11 @@ fun DashboardScreen(
     onAddWater: (Int) -> Unit,
     onResetWater: () -> Unit,
     isRestTimerActive: Boolean,
-    restRemainingSeconds: Int
+    restRemainingSeconds: Int,
+    isWorkoutActive: Boolean = false,
+    activeWorkoutPlanId: Long? = null,
+    activeWorkoutPlanName: String = "",
+    onResumeActiveWorkout: () -> Unit = {}
 ) {
     val todayGregorian = remember { JalaliCalendar.getTodayGregorian() }
     val todayJalali = remember { JalaliCalendar.getTodayJalali() }
@@ -152,6 +156,50 @@ fun DashboardScreen(
             }
         }
 
+        // Active Workout Resume Banner (if user temporarily left an active workout)
+        if (isWorkoutActive) {
+            item {
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    GradientHeroCard(
+                        title = activeWorkoutPlanName.ifBlank { "تمرین در حال اجرا" },
+                        subtitle = "جلسه تمرینی شما ذخیره و فعال است. برای ادامه ست‌ها لمس کنید.",
+                        badgeText = "در حال اجرا",
+                        modifier = Modifier.liquidTapEffect { onResumeActiveWorkout() }
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .testTag("dashboard_resume_workout_btn")
+                                .liquidTapEffect { onResumeActiveWorkout() },
+                            shape = CircleShape,
+                            color = Color.White
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "بازگشت به تمرین فعال",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 3. Horizontal Carousel of Gradient Hero Cards
         item {
             LazyRow(
@@ -161,20 +209,24 @@ fun DashboardScreen(
             ) {
                 // Card 1: Today's Workout
                 item {
+                    val isTodayPlanActiveNow = isWorkoutActive && todayScheduledPlan?.id == activeWorkoutPlanId
                     GradientHeroCard(
                         title = when {
+                            isTodayPlanActiveNow -> "${todayScheduledPlan?.name} (در حال اجرا)"
                             isTodayWorkoutFinished -> "تمرین امروز انجام شد"
                             todayScheduledPlan != null -> todayScheduledPlan.name
                             allPlans.isEmpty() -> "ساخت اولین برنامه"
                             else -> "روز استراحت و ریکاوری"
                         },
                         subtitle = when {
+                            isTodayPlanActiveNow -> "تمام ست‌ها و زمان این جلسه ذخیره مانده‌اند."
                             isTodayWorkoutFinished -> "عالی بود! اطلاعات تمرین در سوابق ذخیره شد."
                             todayScheduledPlan != null -> "جلسه تمرینی برنامه‌ریزی شده برای $todayWeekday"
                             allPlans.isEmpty() -> "برای شروع ورزش، اولین برنامه اختصاصی‌تان را بسازید."
                             else -> "به عضلات خود فرصت بازسازی و رشد دهید."
                         },
                         badgeText = when {
+                            isTodayPlanActiveNow -> "تمرین فعال"
                             isTodayWorkoutFinished -> "تکمیل شد"
                             todayScheduledPlan != null -> "آماده شروع"
                             allPlans.isEmpty() -> "شروع"
@@ -187,7 +239,10 @@ fun DashboardScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(44.dp)
-                                    .liquidTapEffect { onStartWorkout(todayScheduledPlan) },
+                                    .liquidTapEffect {
+                                        if (isTodayPlanActiveNow) onResumeActiveWorkout()
+                                        else onStartWorkout(todayScheduledPlan)
+                                    },
                                 shape = CircleShape,
                                 color = Color.White
                             ) {
@@ -204,7 +259,11 @@ fun DashboardScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (isTodayWorkoutFinished) "تمرین مجدد" else "شروع تمرین",
+                                        text = when {
+                                            isTodayPlanActiveNow -> "ادامه تمرین فعال"
+                                            isTodayWorkoutFinished -> "تمرین مجدد"
+                                            else -> "شروع تمرین"
+                                        },
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.Black

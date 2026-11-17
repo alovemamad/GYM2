@@ -55,8 +55,12 @@ import com.example.util.BackupSaveResult
 import com.example.util.ImageStorageHelper
 import com.example.util.InstallLaunchStatus
 import com.example.util.NotificationHelper
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.util.PersianNumberHelper
 import com.example.util.ReleaseUpdateInfo
+import com.example.util.ReminderScheduler
 import com.example.util.UpdateCheckResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -92,8 +96,24 @@ fun ProfileSettingsScreen(
     var lastSavedBackupResult by remember { mutableStateOf<BackupSaveResult?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
 
-    // Permission launcher for Android 13+ notifications
+    // Permission launcher for Android 13+ notifications & background reliability checks
     var hasNotifPermission by remember { mutableStateOf(NotificationHelper.hasNotificationPermission(context)) }
+    var canExactAlarm by remember { mutableStateOf(ReminderScheduler.canScheduleExactAlarms(context)) }
+    var isIgnoringBattery by remember { mutableStateOf(ReminderScheduler.isIgnoringBatteryOptimizations(context)) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasNotifPermission = NotificationHelper.hasNotificationPermission(context)
+                canExactAlarm = ReminderScheduler.canScheduleExactAlarms(context)
+                isIgnoringBattery = ReminderScheduler.isIgnoringBatteryOptimizations(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -374,6 +394,75 @@ fun ProfileSettingsScreen(
                         }
                     }
 
+                    // Exact Alarm Permission Banner (Android 12+) if revoked
+                    if (!canExactAlarm) {
+                        item {
+                            SolidGroupedCard {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(Icons.Filled.AlarmOff, contentDescription = null, tint = SemanticWarning)
+                                        Text(
+                                            "دسترسی زنگ دقیق غیرفعال است",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SemanticWarning
+                                        )
+                                    }
+                                    Text(
+                                        "برای اینکه اعلان‌ها حتی در زمان بسته بودن طولانی‌مدت برنامه سر ساعت دقیق ارسال شوند، دسترسی «آلارم و یادآورها» را فعال کنید.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = LiquidTheme.textPrimary
+                                    )
+                                    LiquidPrimaryButton(
+                                        text = "فعال‌سازی آلارم دقیق",
+                                        onClick = { ReminderScheduler.openExactAlarmSettings(context) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Battery Optimization Banner for closed-app delivery reliability
+                    if (!isIgnoringBattery) {
+                        item {
+                            SolidGroupedCard {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(Icons.Filled.BatteryAlert, contentDescription = null, tint = LiquidTheme.iconOrange)
+                                        Text(
+                                            "جلوگیری از توقف یادآور در پس‌زمینه",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = LiquidTheme.textPrimary
+                                        )
+                                    }
+                                    Text(
+                                        "در برخی گوشی‌ها (مثل سامسونگ و شیائومی)، بهینه‌ساز باتری باعث می‌شود یادآورها زمانی که برنامه بسته است با تاخیر یا بعد از باز کردن برنامه یکجا بیایند. در صفحه بازشده، GYM PRO را روی «نامحدود / Unrestricted» بگذارید.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = LiquidTheme.textSecondary
+                                    )
+                                    LiquidSecondaryButton(
+                                        text = "تنظیم باتری در حالت نامحدود",
+                                        icon = Icons.Filled.Settings,
+                                        onClick = { ReminderScheduler.openBatteryOptimizationSettings(context) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         LiquidSectionHeader(title = "هشدارهای روزانه")
 
@@ -382,7 +471,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور تمرین ورزشی",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.workoutReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.FitnessCenter,
-                                iconTint = SemanticIconRed,
+                                iconTint = LiquidTheme.iconRed,
                                 showArrow = true,
                                 showDivider = true,
                                 onClick = { timePickerTarget = "WORKOUT" },
@@ -403,7 +492,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور نوشیدن آب",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.waterReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.WaterDrop,
-                                iconTint = SemanticIconCyan,
+                                iconTint = LiquidTheme.iconCyan,
                                 showArrow = true,
                                 showDivider = true,
                                 onClick = { timePickerTarget = "WATER" },
@@ -424,7 +513,7 @@ fun ProfileSettingsScreen(
                                 title = "یادآور مصرف مکمل‌ها",
                                 subtitle = "ساعت: ${PersianNumberHelper.toPersianDigits(userSettings.supplementReminderTime)} (برای تغییر ساعت لمس کنید)",
                                 icon = Icons.Filled.Medication,
-                                iconTint = SemanticIconGreen,
+                                iconTint = LiquidTheme.iconGreen,
                                 showArrow = true,
                                 showDivider = false,
                                 onClick = { timePickerTarget = "SUPPLEMENT" },
@@ -783,7 +872,7 @@ fun ProfileSettingsScreen(
                                         title = "ظاهر و پالت‌های رنگی",
                                         subtitle = "حالت سیستم و ۸ پالت اختصاصی Liquid Glass",
                                         icon = Icons.Filled.Palette,
-                                        iconTint = SemanticIconPurple,
+                                        iconTint = LiquidTheme.iconPurple,
                                         showDivider = true,
                                         onClick = { currentSubScreen = "appearance" }
                                     )
@@ -792,7 +881,7 @@ fun ProfileSettingsScreen(
                                         title = "یادآورها و هشدارها",
                                         subtitle = "تمرین، مصرف آب و مکمل‌ها",
                                         icon = Icons.Filled.Notifications,
-                                        iconTint = SemanticIconOrange,
+                                        iconTint = LiquidTheme.iconOrange,
                                         showDivider = false,
                                         onClick = { currentSubScreen = "reminders" }
                                     )
@@ -812,7 +901,7 @@ fun ProfileSettingsScreen(
                                         title = "ایجاد فایل پشتیبان جدید در حافظه",
                                         subtitle = "ذخیره فایل JSON در پوشه دانلودها و حافظه برنامه",
                                         icon = Icons.Filled.Save,
-                                        iconTint = SemanticIconBlue,
+                                        iconTint = LiquidTheme.iconBlue,
                                         showDivider = true,
                                         modifier = Modifier.testTag("create_backup_file_row"),
                                         onClick = {
@@ -834,7 +923,7 @@ fun ProfileSettingsScreen(
                                         title = "ذخیره فایل پشتیبان در مسیر دلخواه",
                                         subtitle = "انتخاب پوشه دلخواه با مدیریت فایل سیستم",
                                         icon = Icons.Filled.CreateNewFolder,
-                                        iconTint = SemanticIconPurple,
+                                        iconTint = LiquidTheme.iconPurple,
                                         showDivider = true,
                                         modifier = Modifier.testTag("save_backup_saf_row"),
                                         onClick = {
@@ -850,7 +939,7 @@ fun ProfileSettingsScreen(
                                         title = "بازیابی اطلاعات از فایل پشتیبان",
                                         subtitle = "بازیابی از پوشه برنامه یا انتخاب فایل از گوشی",
                                         icon = Icons.Filled.Restore,
-                                        iconTint = SemanticIconGreen,
+                                        iconTint = LiquidTheme.iconGreen,
                                         showDivider = true,
                                         modifier = Modifier.testTag("restore_backup_file_row"),
                                         onClick = {
@@ -882,7 +971,7 @@ fun ProfileSettingsScreen(
                                         title = "خروجی هوشمند برای هوش مصنوعی",
                                         subtitle = "پرامپت آنالیز جامع تمرین و تغذیه",
                                         icon = Icons.Filled.AutoAwesome,
-                                        iconTint = SemanticIconIndigo,
+                                        iconTint = LiquidTheme.iconIndigo,
                                         showDivider = true,
                                         onClick = {
                                             coroutineScope.launch {
@@ -896,7 +985,7 @@ fun ProfileSettingsScreen(
                                         title = "درباره GYM",
                                         subtitle = "انگیزشی • ارتباط با توسعه‌دهنده",
                                         icon = Icons.Filled.Info,
-                                        iconTint = SemanticIconCyan,
+                                        iconTint = LiquidTheme.iconCyan,
                                         showDivider = false,
                                         onClick = { showAboutDialog = true }
                                     )

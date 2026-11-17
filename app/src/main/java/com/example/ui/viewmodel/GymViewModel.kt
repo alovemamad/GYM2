@@ -18,44 +18,41 @@ import java.io.File
 class GymViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
-     * مقدار اولیه را همان لحظه از دیتابیس/تنظیمات می‌خواند تا هنگام ورود به برنامه
-     * صفحه‌ی خالی، آنبوردینگ یا تم پیش‌فرض برای چند فریم نمایش داده نشود.
+     * فقط تنظیمات ظاهری و وضعیت آنبوردینگ پیش‌بارگذاری می‌شود تا در فریم اول تم/آنبوردینگ پرش نداشته باشد؛
+     * سایر لیست‌های دیتابیس به‌صورت Eagerly و غیرمسدودکننده روی ترد IO بارگذاری می‌شوند.
      */
-    private fun <T> Flow<T>.stateInPreloaded(default: T): StateFlow<T> {
+    private fun <T> Flow<T>.stateInSettingsPreloaded(default: T): StateFlow<T> {
         val initial = try {
-            kotlinx.coroutines.runBlocking { this@stateInPreloaded.first() }
+            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) { this@stateInSettingsPreloaded.first() }
         } catch (_: Exception) {
             default
         }
-        return stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initial)
+        return stateIn(viewModelScope, SharingStarted.Eagerly, initial)
+    }
+
+    private fun <T> Flow<T>.stateInEagerly(default: T): StateFlow<T> {
+        return stateIn(viewModelScope, SharingStarted.Eagerly, default)
     }
 
     private val db = AppDatabase.getInstance(application)
     private val prefs = UserPreferences(application)
     val repository = GymRepository(application, db, prefs)
 
-    val userSettings = repository.userSettings.stateInPreloaded(UserSettings()
-    )
+    val userSettings = repository.userSettings.stateInSettingsPreloaded(UserSettings())
 
-    val allPlans = repository.allPlans.stateInPreloaded(emptyList()
-    )
+    val allPlans = repository.allPlans.stateInEagerly(emptyList())
 
-    val allHistories = repository.allHistories.stateInPreloaded(emptyList()
-    )
+    val allHistories = repository.allHistories.stateInEagerly(emptyList())
 
-    val allSupplements = repository.allSupplements.stateInPreloaded(emptyList()
-    )
+    val allSupplements = repository.allSupplements.stateInEagerly(emptyList())
 
-    val allMeasurements = repository.allMeasurements.stateInPreloaded(emptyList()
-    )
+    val allMeasurements = repository.allMeasurements.stateInEagerly(emptyList())
 
-    val latestMeasurement = repository.latestMeasurement.stateInPreloaded(null)
+    val latestMeasurement = repository.latestMeasurement.stateInEagerly(null)
 
-    val allSkips = repository.allSkips.stateInPreloaded(emptyList()
-    )
+    val allSkips = repository.allSkips.stateInEagerly(emptyList())
 
-    val datesWithNutrition = repository.datesWithNutrition.stateInPreloaded(emptyList()
-    )
+    val datesWithNutrition = repository.datesWithNutrition.stateInEagerly(emptyList())
 
     // Selected date for nutrition tab (defaults to today Gregorian)
     private val _selectedNutritionDate = MutableStateFlow(JalaliCalendar.getTodayGregorian())
@@ -63,25 +60,24 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
 
     val selectedNutritionLog = _selectedNutritionDate.flatMapLatest { date ->
         repository.getNutritionLog(date)
-    }.stateInPreloaded(null)
+    }.stateInEagerly(null)
 
     val selectedDateSupplementIntakes = _selectedNutritionDate.flatMapLatest { date ->
         repository.getSupplementIntakeForDate(date)
-    }.stateInPreloaded(emptyList())
+    }.stateInEagerly(emptyList())
 
-    val allSupplementIntakeHistories = repository.allSupplementIntakeHistories.stateInPreloaded(emptyList()
-    )
+    val allSupplementIntakeHistories = repository.allSupplementIntakeHistories.stateInEagerly(emptyList())
 
     val todayNutritionLog = repository.getNutritionLog(JalaliCalendar.getTodayGregorian())
-        .stateInPreloaded(null)
+        .stateInEagerly(null)
 
     // Unfinished active sets check (for resumption)
-    val unfinishedActiveSets = repository.allSetLogs.stateInPreloaded(emptyList()
-    )
+    val unfinishedActiveSets = repository.allSetLogs.stateInEagerly(emptyList())
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             repository.seedStarterPlanIfEmpty()
+            ReminderScheduler.syncAllReminders(getApplication())
         }
     }
 

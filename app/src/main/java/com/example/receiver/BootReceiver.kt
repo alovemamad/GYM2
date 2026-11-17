@@ -1,60 +1,39 @@
 package com.example.receiver
 
+import android.app.AlarmManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.example.data.local.UserPreferences
-import com.example.util.NotificationHelper
 import com.example.util.ReminderScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class BootReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
-            intent.action == "android.intent.action.QUICKBOOT_POWERON"
-        ) {
-            CoroutineScope(Dispatchers.IO).launch {
+        val action = intent.action ?: return
+        val relevant = action == Intent.ACTION_BOOT_COMPLETED ||
+            action == "android.intent.action.QUICKBOOT_POWERON" ||
+            action == "com.htc.intent.action.QUICKBOOT_POWERON" ||
+            action == Intent.ACTION_MY_PACKAGE_REPLACED ||
+            action == Intent.ACTION_TIME_CHANGED ||
+            action == Intent.ACTION_TIMEZONE_CHANGED ||
+            action == AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED
+
+        if (!relevant) return
+
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                ReminderScheduler.syncAllReminders(appContext)
+            } catch (_: Exception) {
+            } finally {
                 try {
-                    val prefs = UserPreferences(context)
-                    val settings = prefs.userSettingsFlow.first()
-
-                    if (settings.workoutReminderEnabled) {
-                        ReminderScheduler.scheduleDailyReminder(
-                            context = context,
-                            reminderId = ReminderScheduler.ID_WORKOUT,
-                            timeStr = settings.workoutReminderTime,
-                            title = "وقت تمرین و باشگاه!",
-                            message = "امروز روز ساختن بدنی قوی‌تر است. برنامه‌ی تمرینت منتظرته!",
-                            channelId = NotificationHelper.CHANNEL_WORKOUT
-                        )
-                    }
-
-                    if (settings.waterReminderEnabled) {
-                        ReminderScheduler.scheduleDailyReminder(
-                            context = context,
-                            reminderId = ReminderScheduler.ID_WATER,
-                            timeStr = settings.waterReminderTime,
-                            title = "یادآور نوشیدن آب",
-                            message = "هیدراته بمانید! یک لیوان آب خنک بنوشید.",
-                            channelId = NotificationHelper.CHANNEL_WATER
-                        )
-                    }
-
-                    if (settings.supplementReminderEnabled) {
-                        ReminderScheduler.scheduleDailyReminder(
-                            context = context,
-                            reminderId = ReminderScheduler.ID_SUPPLEMENT,
-                            timeStr = settings.supplementReminderTime,
-                            title = "یادآور مصرف مکمل‌ها",
-                            message = "زمان مصرف مکمل‌های روزانه فرا رسیده است.",
-                            channelId = NotificationHelper.CHANNEL_SUPPLEMENT
-                        )
-                    }
-                } catch (_: Exception) {}
+                    pendingResult.finish()
+                } catch (_: Exception) {
+                }
             }
         }
     }

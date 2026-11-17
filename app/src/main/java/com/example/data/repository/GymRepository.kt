@@ -156,16 +156,29 @@ class GymRepository(
     val allSupplements: Flow<List<Supplement>> = supplementDao.getAllSupplements()
 
     suspend fun saveSupplement(supplement: Supplement): Long {
-        return if (supplement.id == 0L) {
+        val savedId = if (supplement.id == 0L) {
             supplementDao.insertSupplement(supplement)
         } else {
             supplementDao.updateSupplement(supplement)
             supplement.id
         }
+        if (supplement.isActive) {
+            com.example.util.ReminderScheduler.scheduleSupplementItemReminder(
+                context = context,
+                supplementId = savedId,
+                timeStr = supplement.reminderTime,
+                name = supplement.name,
+                dosage = supplement.dosage
+            )
+        } else {
+            com.example.util.ReminderScheduler.cancelSupplementItemReminder(context, savedId)
+        }
+        return savedId
     }
 
     suspend fun deleteSupplement(supplement: Supplement) {
         supplementDao.deleteSupplement(supplement)
+        com.example.util.ReminderScheduler.cancelSupplementItemReminder(context, supplement.id)
     }
 
     fun getSupplementIntakeForDate(date: String): Flow<List<SupplementIntakeHistory>> =

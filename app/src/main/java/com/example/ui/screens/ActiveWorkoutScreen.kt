@@ -25,10 +25,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.ActiveWorkoutViewModel
 import com.example.util.PersianNumberHelper
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun ActiveWorkoutScreen(
@@ -37,22 +39,21 @@ fun ActiveWorkoutScreen(
     onWorkoutFinished: () -> Unit,
     weightUnit: String = "kg"
 ) {
-    val planName by viewModel.currentPlanName.collectAsState()
-    val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
-    val exercisesState by viewModel.exercisesState.collectAsState()
-    val isRestTimerActive by viewModel.isRestTimerActive.collectAsState()
-    val restSecondsRemaining by viewModel.restSecondsRemaining.collectAsState()
-    val totalRestUsed by viewModel.totalRestSecondsUsed.collectAsState()
-    val isGlobalCustomMetrics by viewModel.isGlobalCustomMetrics.collectAsState()
+    val planName by viewModel.currentPlanName.collectAsStateWithLifecycle()
+    val exercisesState by viewModel.exercisesState.collectAsStateWithLifecycle()
+    val isRestTimerActive by viewModel.isRestTimerActive.collectAsStateWithLifecycle()
+    val restSecondsRemaining by viewModel.restSecondsRemaining.collectAsStateWithLifecycle()
+    val isGlobalCustomMetrics by viewModel.isGlobalCustomMetrics.collectAsStateWithLifecycle()
 
+    var showExitConfirmDialog by remember { mutableStateOf(false) }
     var showFinishConfirmDialog by remember { mutableStateOf(false) }
     var showCancelConfirmDialog by remember { mutableStateOf(false) }
     var showWorkoutSettingsDialog by remember { mutableStateOf(false) }
     var selectedDefaultRest by remember { mutableIntStateOf(60) }
 
-    // Intercept back button to allow temporary exit without losing progress
+    // جلوگیری از خروج ناخواسته با زدن دکمه برگشت گوشی یا بستن
     BackHandler {
-        onTemporaryExit()
+        showExitConfirmDialog = true
     }
 
     Scaffold(
@@ -65,7 +66,7 @@ fun ActiveWorkoutScreen(
                     LiquidCircleButton(
                         icon = Icons.Filled.Close,
                         contentDescription = "خروج موقت",
-                        onClick = onTemporaryExit
+                        onClick = { showExitConfirmDialog = true }
                     )
                 },
                 actions = {
@@ -116,44 +117,10 @@ fun ActiveWorkoutScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val minutes = elapsedSeconds / 60
-                    val seconds = elapsedSeconds % 60
-                    val timeStr = "${String.format("%02d", minutes)}:${String.format("%02d", seconds)}"
-
-                    // Elapsed Workout Time Card
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(68.dp)
-                            .liquidGlass(shape = RoundedCornerShape(18.dp), elevation = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(LiquidTheme.iconOrange.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Filled.Timer, contentDescription = null, tint = LiquidTheme.iconOrange, modifier = Modifier.size(20.dp))
-                            }
-                            Column {
-                                Text("مدت تمرین", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
-                                Text(
-                                    PersianNumberHelper.toPersianDigits(timeStr),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = LiquidTheme.textPrimary
-                                )
-                            }
-                        }
-                    }
+                    WorkoutElapsedStatCard(
+                        elapsedSecondsFlow = viewModel.elapsedSeconds,
+                        modifier = Modifier.weight(1f)
+                    )
 
                     // Completed Sets Ratio Card
                     val totalSets = exercisesState.sumOf { it.sets.size }
@@ -665,6 +632,18 @@ fun ActiveWorkoutScreen(
         )
     }
 
+    // Accidental-exit protection dialog
+    if (showExitConfirmDialog) {
+        LiquidAlertDialog(
+            onDismissRequest = { showExitConfirmDialog = false },
+            title = "خروج از صفحه تمرین؟",
+            message = "نگران نباشید؛ تمام ست‌ها، وزنه‌ها و زمان تمرین شما ذخیره می‌مانند و هر زمان می‌توانید برگردید و تمرین را ادامه دهید.",
+            confirmText = "خروج موقت",
+            dismissText = "ادامه تمرین",
+            onConfirm = { onTemporaryExit() }
+        )
+    }
+
     // Cancel Workout Confirmation Dialog
     if (showCancelConfirmDialog) {
         LiquidAlertDialog(
@@ -679,5 +658,49 @@ fun ActiveWorkoutScreen(
                 onTemporaryExit()
             }
         )
+    }
+}
+
+@Composable
+private fun WorkoutElapsedStatCard(
+    elapsedSecondsFlow: StateFlow<Long>,
+    modifier: Modifier = Modifier
+) {
+    val elapsedSeconds by elapsedSecondsFlow.collectAsStateWithLifecycle()
+    val minutes = elapsedSeconds / 60
+    val seconds = elapsedSeconds % 60
+    val timeStr = "${String.format("%02d", minutes)}:${String.format("%02d", seconds)}"
+
+    Box(
+        modifier = modifier
+            .height(68.dp)
+            .liquidGlass(shape = RoundedCornerShape(18.dp), elevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(LiquidTheme.iconOrange.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Timer, contentDescription = null, tint = LiquidTheme.iconOrange, modifier = Modifier.size(20.dp))
+            }
+            Column {
+                Text("مدت تمرین", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
+                Text(
+                    PersianNumberHelper.toPersianDigits(timeStr),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = LiquidTheme.textPrimary
+                )
+            }
+        }
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable // 👈 اضافه شد
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -72,6 +73,8 @@ class MainActivity : ComponentActivity() {
 
             // Active workout state
             val isWorkoutActive by activeWorkoutViewModel.isWorkoutActive.collectAsStateWithLifecycle()
+            val activeWorkoutPlanId by activeWorkoutViewModel.currentPlanId.collectAsStateWithLifecycle()
+            val activeWorkoutPlanName by activeWorkoutViewModel.currentPlanName.collectAsStateWithLifecycle()
             val isRestTimerActive by activeWorkoutViewModel.isRestTimerActive.collectAsStateWithLifecycle()
             val restRemainingSeconds by activeWorkoutViewModel.restSecondsRemaining.collectAsStateWithLifecycle()
 
@@ -196,32 +199,35 @@ class MainActivity : ComponentActivity() {
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
                         }
+                        val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
                         Scaffold(
                             containerColor = androidx.compose.ui.graphics.Color.Transparent,
                             // هر صفحه نوار بالای خودش را با پدینگ status bar دارد؛ پدینگ دوبل نشود
                             contentWindowInsets = WindowInsets(0, 0, 0, 0),
                             bottomBar = {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    // Persistent Rest Timer Dock
-                                    LiquidRestTimerDock(
-                                        remainingSeconds = restRemainingSeconds,
-                                        isActive = isRestTimerActive,
-                                        onAdd15Seconds = { activeWorkoutViewModel.addRestTime(15) },
-                                        onCancel = { activeWorkoutViewModel.cancelRestTimer() },
-                                        onClickDock = {
-                                            if (isWorkoutActive) {
-                                                currentScreen = "active_workout"
+                                if (!isImeVisible) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        // Persistent Rest Timer Dock
+                                        LiquidRestTimerDock(
+                                            remainingSeconds = restRemainingSeconds,
+                                            isActive = isRestTimerActive,
+                                            onAdd15Seconds = { activeWorkoutViewModel.addRestTime(15) },
+                                            onCancel = { activeWorkoutViewModel.cancelRestTimer() },
+                                            onClickDock = {
+                                                if (isWorkoutActive) {
+                                                    currentScreen = "active_workout"
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
 
-                                    // Floating Liquid Glass Navigation Bar
-                                    LiquidBottomBar(
-                                        currentRoute = screenRoute,
-                                        onNavigate = { currentScreen = it }
-                                    )
+                                        // Floating Liquid Glass Navigation Bar
+                                        LiquidBottomBar(
+                                            currentRoute = screenRoute,
+                                            onNavigate = { currentScreen = it }
+                                        )
+                                    }
                                 }
                             }
                         ) { innerPadding ->
@@ -230,20 +236,10 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .padding(innerPadding)
                             ) {
-                                AnimatedContent(
+                                Crossfade(
                                     targetState = screenRoute,
-                                    transitionSpec = {
-                                        // بدون هیچ فریم خالی: صفحه‌ی جدید فوراً جایگزین می‌شود
-                                        // و فقط کمی (بدون شفافیت صفر) لغزیده و بزرگ می‌شود
-                                        val order = Screen.bottomNavItems.map { it.route }
-                                        val dir = if (order.indexOf(targetState) > order.indexOf(initialState)) 1 else -1
-                                        (fadeIn(tween(160), initialAlpha = 0.82f) +
-                                            slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { (it / 14) * dir } +
-                                            scaleIn(tween(300, easing = FastOutSlowInEasing), initialScale = 0.975f))
-                                            .togetherWith(ExitTransition.None)
-                                            .using(SizeTransform(clip = false))
-                                    },
-                                    label = "tab_transition"
+                                    animationSpec = tween(durationMillis = 150),
+                                    label = "tab_crossfade"
                                 ) { route ->
                                 when (route) {
                                     Screen.Dashboard.route -> {
@@ -272,7 +268,11 @@ class MainActivity : ComponentActivity() {
                                             onAddWater = { amount -> gymViewModel.addWater(amount) },
                                             onResetWater = { gymViewModel.resetWater() },
                                             isRestTimerActive = isRestTimerActive,
-                                            restRemainingSeconds = restRemainingSeconds
+                                            restRemainingSeconds = restRemainingSeconds,
+                                            isWorkoutActive = isWorkoutActive,
+                                            activeWorkoutPlanId = activeWorkoutPlanId,
+                                            activeWorkoutPlanName = activeWorkoutPlanName,
+                                            onResumeActiveWorkout = { currentScreen = "active_workout" }
                                         )
                                     }
 
@@ -343,7 +343,11 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onGetPlanExercises = { planId ->
                                                 gymViewModel.repository.getExercisesForPlanSync(planId)
-                                            }
+                                            },
+                                            isWorkoutActive = isWorkoutActive,
+                                            activeWorkoutPlanId = activeWorkoutPlanId,
+                                            activeWorkoutPlanName = activeWorkoutPlanName,
+                                            onResumeActiveWorkout = { currentScreen = "active_workout" }
                                         )
                                     }
 

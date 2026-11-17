@@ -87,22 +87,25 @@ fun LiquidGlassRoot(
         label = "bg_palette_accent"
     )
 
-    val atmosphericBrush = if (isDark) {
-        Brush.verticalGradient(
-            colors = listOf(
-                paletteEnd.copy(alpha = 0.62f),
-                Color.Black.copy(alpha = 0.50f),
-                paletteAccent.copy(alpha = 0.24f)
+    val baseTint = LiquidTheme.backgroundNeutral
+    val atmosphericBrush = remember(isDark, baseTint, paletteStart, paletteEnd, paletteAccent) {
+        if (isDark) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    paletteEnd.copy(alpha = 0.72f),
+                    baseTint.copy(alpha = 0.62f),
+                    paletteAccent.copy(alpha = 0.26f)
+                )
             )
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.66f),
-                paletteStart.copy(alpha = 0.22f),
-                Color.White.copy(alpha = 0.58f)
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    baseTint.copy(alpha = 0.44f),
+                    paletteStart.copy(alpha = 0.28f),
+                    paletteEnd.copy(alpha = 0.22f)
+                )
             )
-        )
+        }
     }
 
     Box(
@@ -143,7 +146,7 @@ fun LiquidGlassRoot(
 /**
  * Primary Liquid Glass modifier based on Snipzy CSS liquid glass design:
  * - Backdrop blur with Haze (16dp)
- * - Translucent overlay tint reactive to appearance mode & active palette
+ * - Translucent overlay tint reactive to appearance mode & active palette (without harsh white glare in Day mode)
  * - Specular highlight gradient border tinted with active accent color
  * - Inset vertical reflection sheen
  * - Soft ambient shadow
@@ -152,67 +155,74 @@ fun LiquidGlassRoot(
 fun Modifier.liquidGlass(
     hazeState: HazeState? = LocalHazeState.current,
     shape: Shape = RoundedCornerShape(22.dp),
-    tintAlpha: Float = if (LiquidTheme.isDark) 0.24f else 0.56f,
+    tintAlpha: Float = if (LiquidTheme.isDark) 0.34f else 0.62f,
     elevation: Dp = 8.dp,
-    borderAlpha: Float = if (LiquidTheme.isDark) 0.72f else 0.88f
+    borderAlpha: Float = if (LiquidTheme.isDark) 0.68f else 0.72f
 ): Modifier {
     val isDark = LiquidTheme.isDark
     val accent = LiquidTheme.accentColor
     val paletteStart = LiquidTheme.palette.gradientStart
-    val bgColor = if (isDark) {
-        Color(0xFF0A0F14).copy(alpha = tintAlpha)
-    } else {
-        Color.White.copy(alpha = tintAlpha)
+    val glassBase = LiquidTheme.glassSurfaceColor
+    val bgColor = remember(glassBase, tintAlpha) {
+        glassBase.copy(alpha = tintAlpha)
     }
 
-    // Specular border gradient: bright highlight fading into active palette accent edge
-    val borderBrush = Brush.linearGradient(
-        colors = listOf(
-            Color.White.copy(alpha = borderAlpha),
-            accent.copy(alpha = if (isDark) 0.42f else 0.35f),
-            Color.White.copy(alpha = 0.14f),
-            paletteStart.copy(alpha = if (isDark) 0.30f else 0.22f)
-        ),
-        start = Offset(0f, 0f),
-        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-    )
+    // Specular border gradient: tinted glass rim without blinding white edge in Day mode
+    val borderBrush = remember(isDark, accent, paletteStart, borderAlpha) {
+        Brush.linearGradient(
+            colors = listOf(
+                if (isDark) Color.White.copy(alpha = borderAlpha) else accent.copy(alpha = (borderAlpha * 0.58f).coerceAtMost(0.55f)),
+                accent.copy(alpha = if (isDark) 0.44f else 0.38f),
+                if (isDark) Color.White.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.50f),
+                paletteStart.copy(alpha = if (isDark) 0.32f else 0.28f)
+            ),
+            start = Offset(0f, 0f),
+            end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+        )
+    }
 
     // Inner glossy reflection sheen
-    val innerSpecularBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color.White.copy(alpha = if (isDark) 0.14f else 0.28f),
-            accent.copy(alpha = 0.04f),
-            Color.Transparent
-        ),
-        startY = 0f,
-        endY = 120f
-    )
+    val innerSpecularBrush = remember(isDark, accent) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = if (isDark) 0.12f else 0.15f),
+                accent.copy(alpha = if (isDark) 0.05f else 0.06f),
+                Color.Transparent
+            ),
+            startY = 0f,
+            endY = 120f
+        )
+    }
+
+    val hazeStyle = remember(bgColor) {
+        HazeStyle(
+            backgroundColor = bgColor,
+            tints = emptyList(),
+            blurRadius = 16.dp,
+            noiseFactor = 0.04f
+        )
+    }
 
     return this
         .shadow(
             elevation = elevation,
             shape = shape,
-            spotColor = accent.copy(alpha = 0.28f),
-            ambientColor = Color.Black.copy(alpha = 0.20f)
+            spotColor = accent.copy(alpha = if (isDark) 0.28f else 0.20f),
+            ambientColor = Color.Black.copy(alpha = if (isDark) 0.20f else 0.12f)
         )
         .clip(shape)
         .then(
             if (hazeState != null) {
                 Modifier.hazeChild(
                     state = hazeState,
-                    style = HazeStyle(
-                        backgroundColor = bgColor,
-                        tints = emptyList(),
-                        blurRadius = 16.dp,
-                        noiseFactor = 0.04f
-                    )
+                    style = hazeStyle
                 )
             } else {
                 Modifier.background(bgColor)
             }
         )
         .background(innerSpecularBrush)
-        .border(BorderStroke(1.2.dp, borderBrush), shape = shape)
+        .border(BorderStroke(1.1.dp, borderBrush), shape = shape)
 }
 
 /**
@@ -714,7 +724,7 @@ fun LiquidSecondaryButton(
             .liquidGlass(
                 shape = CircleShape,
                 elevation = 4.dp,
-                tintAlpha = if (LiquidTheme.isDark) 0.45f else 0.55f
+                tintAlpha = if (LiquidTheme.isDark) 0.42f else 0.68f
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -1283,6 +1293,18 @@ fun LiquidBottomBar(
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDark = LiquidTheme.isDark
+    val accent = LiquidTheme.accentColor
+    val paletteStart = LiquidTheme.palette.gradientStart
+    val selectedBrush = remember(isDark, accent, paletteStart) {
+        Brush.linearGradient(
+            listOf(
+                paletteStart.copy(alpha = if (isDark) 0.34f else 0.22f),
+                accent.copy(alpha = if (isDark) 0.24f else 0.16f)
+            )
+        )
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -1292,8 +1314,8 @@ fun LiquidBottomBar(
             .liquidGlass(
                 shape = RoundedCornerShape(36.dp),
                 elevation = 12.dp,
-                tintAlpha = 0.28f,
-                borderAlpha = 0.85f
+                tintAlpha = if (isDark) 0.36f else 0.72f,
+                borderAlpha = if (isDark) 0.72f else 0.70f
             )
     ) {
         Row(
@@ -1305,13 +1327,6 @@ fun LiquidBottomBar(
         ) {
             com.example.ui.navigation.Screen.bottomNavItems.forEach { screen ->
                 val selected = currentRoute == screen.route
-                val accent = LiquidTheme.accentColor
-                val selectedBrush = Brush.linearGradient(
-                    listOf(
-                        LiquidTheme.palette.gradientStart.copy(alpha = if (LiquidTheme.isDark) 0.34f else 0.22f),
-                        accent.copy(alpha = if (LiquidTheme.isDark) 0.24f else 0.16f)
-                    )
-                )
                 Box(
                     Modifier
                         .weight(1f)
@@ -1321,8 +1336,8 @@ fun LiquidBottomBar(
                             if (selected) Modifier.background(selectedBrush) else Modifier
                         )
                         .border(
-                            if (selected) 1.2.dp else 0.dp,
-                            if (selected) accent.copy(alpha = 0.85f) else Color.Transparent,
+                            1.dp,
+                            if (selected) accent.copy(alpha = 0.78f) else Color.Transparent,
                             RoundedCornerShape(28.dp)
                         )
                         .clickable { onNavigate(screen.route) },
