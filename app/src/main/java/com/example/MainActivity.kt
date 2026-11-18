@@ -417,7 +417,10 @@ class MainActivity : ComponentActivity() {
                                             onExportBackupJson = { gymViewModel.exportDataJson() },
                                             onRestoreBackupJson = { json -> gymViewModel.restoreDataJson(json) },
                                             onGetAiPrompt = { gymViewModel.getAiExportPrompt() },
-                                            onClearAllData = { gymViewModel.clearAllData() },
+                                            onClearAllData = {
+                                                gymViewModel.clearAllData()
+                                                activeWorkoutViewModel.cancelAndResetWorkout()
+                                            },
                                             onOpenOnboarding = { isShowingOnboarding = true },
                                             onUpdateProfilePhoto = { photo -> gymViewModel.updateProfilePhoto(photo) },
                                             onUpdateSoundSettings = { en, rVol, tVol, remVol ->

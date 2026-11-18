@@ -1,10 +1,13 @@
 package com.example.data.repository
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.example.data.local.*
 import com.example.util.BackupContainer
 import com.example.util.BackupHelper
+import com.example.util.ImageStorageHelper
 import com.example.util.JalaliCalendar
+import com.example.util.ReminderScheduler
 import com.example.widget.WaterAppWidgetProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Dispatchers
@@ -56,22 +59,27 @@ class GymRepository(
         workoutDao.getExercisesForPlanSync(planId)
 
     suspend fun savePlanWithExercises(plan: WorkoutPlan, exercises: List<WorkoutExercise>): Long {
-        val planId = if (plan.id == 0L) {
-            workoutDao.insertPlan(plan)
-        } else {
-            workoutDao.updatePlan(plan)
-            workoutDao.deleteExercisesForPlan(plan.id)
-            plan.id
-        }
+        return appDatabase.withTransaction {
+            val planId = if (plan.id == 0L) {
+                workoutDao.insertPlan(plan)
+            } else {
+                workoutDao.updatePlan(plan)
+                workoutDao.deleteExercisesForPlan(plan.id)
+                plan.id
+            }
 
-        val updatedExercises = exercises.map { it.copy(planId = planId, id = 0) }
-        workoutDao.insertExercises(updatedExercises)
-        return planId
+            val updatedExercises = exercises.map { it.copy(planId = planId, id = 0) }
+            workoutDao.insertExercises(updatedExercises)
+            planId
+        }
     }
 
     suspend fun deletePlan(planId: Long) {
-        workoutDao.deleteExercisesForPlan(planId)
-        workoutDao.deletePlanById(planId)
+        appDatabase.withTransaction {
+            workoutDao.deleteExercisesForPlan(planId)
+            workoutDao.deleteSkipsForPlan(planId)
+            workoutDao.deletePlanById(planId)
+        }
     }
 
     suspend fun duplicatePlan(planId: Long) {
@@ -94,14 +102,17 @@ class GymRepository(
     val allSkips: Flow<List<WorkoutPlanSkip>> = workoutDao.getAllSkips()
 
     suspend fun recordPlanSkip(planId: Long, originalDate: String, newDate: String?) {
-        workoutDao.insertSkip(
-            WorkoutPlanSkip(
-                planId = planId,
-                originalDate = originalDate,
-                newDate = newDate,
-                createdAt = System.currentTimeMillis()
+        appDatabase.withTransaction {
+            workoutDao.deleteSkipForPlanAndDate(planId, originalDate)
+            workoutDao.insertSkip(
+                WorkoutPlanSkip(
+                    planId = planId,
+                    originalDate = originalDate,
+                    newDate = newDate,
+                    createdAt = System.currentTimeMillis()
+                )
             )
-        )
+        }
     }
 
     suspend fun undoPlanSkip(planId: Long, originalDate: String) {
@@ -239,14 +250,19 @@ class GymRepository(
 
     suspend fun saveMeasurement(measurement: BodyMeasurement) {
         measurementDao.insertOrUpdateMeasurement(measurement)
-        if (measurement.weightKg != null && measurement.weightKg > 0) {
-            val s = userPreferences.userSettingsFlow.first()
-            userPreferences.updateSettings(
-                s.copy(
-                    weightKg = measurement.weightKg,
-                    heightCm = measurement.heightCm ?: s.heightCm
+        val latest = measurementDao.getLatestMeasurementSync()
+        if (latest != null && latest.date == measurement.date) {
+            val validWeight = measurement.weightKg?.takeIf { it > 0.0 }
+            val validHeight = measurement.heightCm?.takeIf { it > 0.0 }
+            if (validWeight != null || validHeight != null) {
+                val s = userPreferences.userSettingsFlow.first()
+                userPreferences.updateSettings(
+                    s.copy(
+                        weightKg = validWeight ?: s.weightKg,
+                        heightCm = validHeight ?: s.heightCm
+                    )
                 )
-            )
+            }
         }
     }
 
@@ -301,7 +317,21 @@ class GymRepository(
         }
     }
 
+    private suspend fun cancelAllScheduledAlarms() {
+        try {
+            ReminderScheduler.cancelReminder(context, ReminderScheduler.ID_WORKOUT)
+            ReminderScheduler.cancelReminder(context, ReminderScheduler.ID_WATER)
+            ReminderScheduler.cancelReminder(context, ReminderScheduler.ID_SUPPLEMENT)
+            ReminderScheduler.cancelReminder(context, ReminderScheduler.ID_REST_TIMER)
+            supplementDao.getAllSupplements().first().forEach { sup ->
+                ReminderScheduler.cancelSupplementItemReminder(context, sup.id)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     private suspend fun doRestore(data: BackupContainer) {
+        cancelAllScheduledAlarms()
 
         // Clear existing tables
         workoutDao.clearAllSetLogs()
@@ -310,57 +340,51 @@ class GymRepository(
         // Restore settings
         userPreferences.updateSettings(data.settings)
 
-        // Restore plans & exercises
-        val planIdMap = mutableMapOf<Long, Long>()
-        data.plans.forEach { p ->
-            val oldId = p.id
-            val newId = workoutDao.insertPlan(p.copy(id = 0))
-            planIdMap[oldId] = newId
-        }
+        // Batch restore all database records inside a single atomic transaction
+        appDatabase.withTransaction {
+            val planIdMap = mutableMapOf<Long, Long>()
+            data.plans.forEach { p ->
+                val oldId = p.id
+                val newId = workoutDao.insertPlan(p.copy(id = 0))
+                planIdMap[oldId] = newId
+            }
 
-        data.exercises.forEach { e ->
-            val targetPlanId = planIdMap[e.planId] ?: e.planId
-            workoutDao.insertExercise(e.copy(id = 0, planId = targetPlanId))
-        }
+            data.exercises.forEach { e ->
+                val targetPlanId = planIdMap[e.planId] ?: e.planId
+                workoutDao.insertExercise(e.copy(id = 0, planId = targetPlanId))
+            }
 
-        // Restore histories
-        data.histories.forEach { h ->
-            workoutDao.insertHistory(h.copy(id = 0))
-        }
+            data.histories.forEach { h ->
+                workoutDao.insertHistory(h.copy(id = 0))
+            }
 
-        // Restore supplements
-        val supIdMap = mutableMapOf<Long, Long>()
-        data.supplements.forEach { s ->
-            val oldId = s.id
-            val newId = supplementDao.insertSupplement(s.copy(id = 0))
-            supIdMap[oldId] = newId
-        }
+            val supIdMap = mutableMapOf<Long, Long>()
+            data.supplements.forEach { s ->
+                val oldId = s.id
+                val newId = supplementDao.insertSupplement(s.copy(id = 0))
+                supIdMap[oldId] = newId
+            }
 
-        // Restore supplement histories
-        data.supplementHistories.forEach { sh ->
-            val newSupId = supIdMap[sh.supplementId] ?: sh.supplementId
-            supplementDao.insertIntakeHistory(sh.copy(id = 0, supplementId = newSupId))
-        }
+            data.supplementHistories.forEach { sh ->
+                val newSupId = supIdMap[sh.supplementId] ?: sh.supplementId
+                supplementDao.insertIntakeHistory(sh.copy(id = 0, supplementId = newSupId))
+            }
 
-        // Restore nutrition
-        data.nutritionLogs.forEach { n ->
-            nutritionDao.insertOrUpdateNutritionLog(n)
-        }
+            data.nutritionLogs.forEach { n ->
+                nutritionDao.insertOrUpdateNutritionLog(n)
+            }
 
-        // Restore measurements
-        data.measurements.forEach { m ->
-            measurementDao.insertOrUpdateMeasurement(m)
-        }
+            data.measurements.forEach { m ->
+                measurementDao.insertOrUpdateMeasurement(m)
+            }
 
-        // Restore skipped/rescheduled plan days
-        data.skips.forEach { sk ->
-            val targetPlanId = planIdMap[sk.planId] ?: sk.planId
-            try {
+            data.skips.forEach { sk ->
+                val targetPlanId = planIdMap[sk.planId] ?: sk.planId
                 workoutDao.insertSkip(sk.copy(id = 0, planId = targetPlanId))
-            } catch (_: Exception) {
             }
         }
 
+        ReminderScheduler.syncAllReminders(context)
         try {
             WaterAppWidgetProvider.updateAllWidgets(context)
         } catch (_: Exception) {
@@ -368,9 +392,15 @@ class GymRepository(
     }
 
     suspend fun clearAllData() = withContext(Dispatchers.IO) {
+        cancelAllScheduledAlarms()
         appDatabase.clearAllTables()
         userPreferences.clearAll()
+        ImageStorageHelper.deleteProfilePhoto(context)
         WaterAppWidgetProvider.updateAllWidgets(context)
+    }
+
+    suspend fun syncSoundCache() {
+        userPreferences.syncSoundCache()
     }
 
     suspend fun updateSoundSettings(enabled: Boolean, restVol: Float, timedVol: Float, reminderVol: Float) {

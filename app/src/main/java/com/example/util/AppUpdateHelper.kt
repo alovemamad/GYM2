@@ -295,7 +295,11 @@ object AppUpdateHelper {
         fileName: String,
         onProgress: (percent: Int, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
+        var targetFile: File? = null
         try {
+            if (!downloadUrl.startsWith("https://", ignoreCase = true)) {
+                return@withContext Result.failure(IllegalArgumentException("آدرس دانلود نامعتبر است."))
+            }
             val updatesDir = File(context.cacheDir, "updates")
             if (!updatesDir.exists()) updatesDir.mkdirs()
             // Clean previous downloaded APKs to save cache space
@@ -305,7 +309,8 @@ object AppUpdateHelper {
 
             val safeName = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
                 .let { if (it.endsWith(".apk", ignoreCase = true)) it else "$it.apk" }
-            val targetFile = File(updatesDir, safeName)
+            val resolvedFile = File(updatesDir, safeName)
+            targetFile = resolvedFile
 
             val request = Request.Builder()
                 .url(downloadUrl)
@@ -324,7 +329,7 @@ object AppUpdateHelper {
                 val totalBytes = body.contentLength()
 
                 body.byteStream().use { input ->
-                    FileOutputStream(targetFile).use { output ->
+                    FileOutputStream(resolvedFile).use { output ->
                         val buffer = ByteArray(16 * 1024)
                         var downloaded = 0L
                         var lastReportedPercent = -1
@@ -341,7 +346,9 @@ object AppUpdateHelper {
                             }
                             if (percent != lastReportedPercent || percent == 100) {
                                 lastReportedPercent = percent
-                                onProgress(percent, downloaded, totalBytes)
+                                withContext(Dispatchers.Main) {
+                                    onProgress(percent, downloaded, totalBytes)
+                                }
                             }
                         }
                         output.flush()
@@ -349,10 +356,12 @@ object AppUpdateHelper {
                 }
             }
 
-            Result.success(targetFile)
+            Result.success(resolvedFile)
         } catch (e: CancellationException) {
+            targetFile?.delete()
             throw e
         } catch (e: Exception) {
+            targetFile?.delete()
             Result.failure(e)
         }
     }

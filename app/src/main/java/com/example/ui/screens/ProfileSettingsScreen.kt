@@ -739,7 +739,6 @@ fun ProfileSettingsScreen(
                                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
                                 onTestNotification()
-                                NotificationHelper.playAlarmSoundAndVibrate(context, AlertType.WORKOUT)
                                 Toast.makeText(context, "اعلان و زنگ تست با موفقیت ارسال شد!", Toast.LENGTH_SHORT).show()
                             }
                         )
@@ -1248,7 +1247,7 @@ fun ProfileSettingsScreen(
                                     val tgIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/momo1f"))
                                     context.startActivity(tgIntent)
                                 } catch (_: Exception) {
-                                    Toast.makeText(context, "تلگرام: @momo1f", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "خطا در باز کردن تلگرام", Toast.LENGTH_SHORT).show()
                                 }
                             },
                         shape = RoundedCornerShape(14.dp),
@@ -1257,20 +1256,23 @@ fun ProfileSettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_telegram),
-                                contentDescription = "تلگرام",
+                                contentDescription = "تلگرام توسعه‌دهنده",
                                 tint = Color.Unspecified,
                                 modifier = Modifier.size(28.dp)
                             )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("تلگرام: @momo1f", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.textPrimary)
-                                Text("مشاهده کانال و ارتباط مستقیم", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
-                            }
+                            Text(
+                                text = "تلگرام توسعه‌دهنده",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = LiquidTheme.textPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = LiquidTheme.textSecondary, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -1284,7 +1286,7 @@ fun ProfileSettingsScreen(
                                     val igIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://instagram.com/die3man"))
                                     context.startActivity(igIntent)
                                 } catch (_: Exception) {
-                                    Toast.makeText(context, "اینستاگرام: @die3man", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "خطا در باز کردن اینستاگرام", Toast.LENGTH_SHORT).show()
                                 }
                             },
                         shape = RoundedCornerShape(14.dp),
@@ -1293,20 +1295,23 @@ fun ProfileSettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_instagram),
-                                contentDescription = "اینستاگرام",
+                                contentDescription = "اینستاگرام توسعه‌دهنده",
                                 tint = Color.Unspecified,
                                 modifier = Modifier.size(28.dp)
                             )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("اینستاگرام: @die3man", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = LiquidTheme.textPrimary)
-                                Text("مشاهده صفحه و محتوای انگیزشی", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
-                            }
+                            Text(
+                                text = "اینستاگرام توسعه‌دهنده",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = LiquidTheme.textPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = LiquidTheme.textSecondary, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -1593,7 +1598,7 @@ private fun AppUpdateDialog(
                                                 }
                                             }
                                             if (info.apkSizeBytes > 0L) {
-                                                val sizeMb = String.format("%.1f", info.apkSizeBytes / (1024.0 * 1024.0))
+                                                val sizeMb = String.format(java.util.Locale.US, "%.1f", info.apkSizeBytes / (1024.0 * 1024.0))
                                                 Text(
                                                     text = "حجم فایل: ${PersianNumberHelper.toPersianDigits(sizeMb)} مگابایت",
                                                     style = MaterialTheme.typography.labelSmall,
@@ -1615,10 +1620,10 @@ private fun AppUpdateDialog(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            val dlMb = String.format("%.1f", downloadedBytes / (1024.0 * 1024.0))
+                                            val dlMb = String.format(java.util.Locale.US, "%.1f", downloadedBytes / (1024.0 * 1024.0))
                                             val pctText = if (downloadProgress >= 0) {
                                                 val totalText = if (totalBytes > 0L) {
-                                                    " (${PersianNumberHelper.toPersianDigits(dlMb)} / ${PersianNumberHelper.toPersianDigits(String.format("%.1f", totalBytes / (1024.0 * 1024.0)))} MB)"
+                                                    " (${PersianNumberHelper.toPersianDigits(dlMb)} / ${PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%.1f", totalBytes / (1024.0 * 1024.0)))} MB)"
                                                 } else ""
                                                 "${PersianNumberHelper.toPersianDigits(downloadProgress)}٪$totalText"
                                             } else {

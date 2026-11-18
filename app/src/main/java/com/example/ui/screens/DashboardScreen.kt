@@ -72,9 +72,10 @@ fun DashboardScreen(
 
     val currentWeight = latestMeasurement?.weightKg ?: userSettings.weightKg
     val currentHeight = latestMeasurement?.heightCm ?: userSettings.heightCm
-    val bmi = if (currentWeight != null && currentHeight != null && currentHeight > 0) {
+    val currentWeightKg = currentWeight?.let { if (userSettings.weightUnit == "lb") it * 0.45359237 else it }
+    val bmi = if (currentWeightKg != null && currentWeightKg > 0.0 && currentHeight != null && currentHeight > 0.0) {
         val hM = currentHeight / 100.0
-        currentWeight / (hM * hM)
+        currentWeightKg / (hM * hM)
     } else null
 
     LazyColumn(
@@ -515,7 +516,7 @@ fun DashboardScreen(
                         icon = Icons.Filled.FitnessCenter,
                         iconTint = LiquidTheme.iconOrange,
                         valueText = if (currentWeight != null) {
-                            "${PersianNumberHelper.toPersianDigits(String.format("%.1f", currentWeight))} ${userSettings.weightUnit}"
+                            "${PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%.1f", currentWeight))} ${userSettings.weightUnit}"
                         } else "اطلاعات وارد نشده",
                         showDivider = true,
                         onClick = onNavigateToAnalysis
@@ -526,7 +527,7 @@ fun DashboardScreen(
                         icon = Icons.Filled.MonitorWeight,
                         iconTint = LiquidTheme.iconCyan,
                         valueText = if (bmi != null) {
-                            "${PersianNumberHelper.toPersianDigits(String.format("%.1f", bmi))} " + when {
+                            "${PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%.1f", bmi))} " + when {
                                 bmi < 18.5 -> "(کمبود وزن)"
                                 bmi < 25.0 -> "(نرمال)"
                                 bmi < 30.0 -> "(اضافه وزن)"

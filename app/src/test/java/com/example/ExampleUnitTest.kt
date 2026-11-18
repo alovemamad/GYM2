@@ -228,4 +228,30 @@ class ExampleUnitTest {
             assertTrue(pt.fullDateLabel.isNotBlank())
         }
     }
+
+    @Test
+    fun testComputeNextDailyTriggerPersianDigitsAndInvalidInput() {
+        val cal = Calendar.getInstance().apply {
+            set(2026, Calendar.MAY, 10, 14, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val now = cal.timeInMillis
+
+        val persianTrigger = ReminderScheduler.computeNextDailyTriggerMillis("۱۸:۳۰", now)
+        assertNotNull(persianTrigger)
+        val parsedCal = Calendar.getInstance().apply { timeInMillis = persianTrigger!! }
+        assertEquals(18, parsedCal.get(Calendar.HOUR_OF_DAY))
+        assertEquals(30, parsedCal.get(Calendar.MINUTE))
+
+        assertNull(ReminderScheduler.computeNextDailyTriggerMillis("abc:def", now))
+        assertNull(ReminderScheduler.computeNextDailyTriggerMillis("25:10", now))
+        assertNull(ReminderScheduler.computeNextDailyTriggerMillis("12:99", now))
+        assertNull(ReminderScheduler.computeNextDailyTriggerMillis("1830", now))
+    }
+
+    @Test
+    fun testJalaliLeapYearEsfandDays() {
+        assertEquals(30, JalaliCalendar.getDaysInJalaliMonth(1403, 12))
+        assertEquals(29, JalaliCalendar.getDaysInJalaliMonth(1404, 12))
+    }
 }

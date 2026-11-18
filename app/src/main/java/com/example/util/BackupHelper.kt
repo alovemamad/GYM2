@@ -210,6 +210,15 @@ object BackupHelper {
         return root.toString(2)
     }
 
+    private fun optNullableInt(obj: JSONObject, key: String): Int? =
+        if (obj.has(key) && !obj.isNull(key)) obj.getInt(key) else null
+
+    private fun optNullableDouble(obj: JSONObject, key: String): Double? =
+        if (obj.has(key) && !obj.isNull(key)) obj.getDouble(key) else null
+
+    private fun optNullableString(obj: JSONObject, key: String): String? =
+        if (obj.has(key) && !obj.isNull(key)) obj.getString(key) else null
+
     fun validateAndParseBackup(jsonString: String): Result<BackupContainer> {
         return runCatching {
             val cleanJson = jsonString.trim().removePrefix("\uFEFF")
@@ -224,9 +233,9 @@ object BackupHelper {
                     userName = setObj.optString("userName", ""),
                     profilePhotoUri = setObj.optString("profilePhotoUri", ""),
                     gender = setObj.optString("gender", ""),
-                    age = if (setObj.has("age")) setObj.getInt("age") else null,
-                    heightCm = if (setObj.has("heightCm")) setObj.getDouble("heightCm") else null,
-                    weightKg = if (setObj.has("weightKg")) setObj.getDouble("weightKg") else null,
+                    age = optNullableInt(setObj, "age"),
+                    heightCm = optNullableDouble(setObj, "heightCm"),
+                    weightKg = optNullableDouble(setObj, "weightKg"),
                     activityLevel = setObj.optString("activityLevel", "MODERATE"),
                     fitnessGoal = setObj.optString("fitnessGoal", "BULK"),
                     mealsCount = setObj.optInt("mealsCount", 4),
@@ -280,12 +289,12 @@ object BackupHelper {
                         name = o.getString("name"),
                         sets = o.optInt("sets", 3),
                         reps = o.optInt("reps", 10),
-                        repsMax = if (o.has("repsMax")) o.getInt("repsMax") else null,
+                        repsMax = optNullableInt(o, "repsMax"),
                         weight = o.optDouble("weight", 0.0),
                         notes = o.optString("notes", ""),
-                        supersetGroup = if (o.has("supersetGroup")) o.getString("supersetGroup") else null,
+                        supersetGroup = optNullableString(o, "supersetGroup"),
                         isTimedExercise = o.optBoolean("isTimedExercise", false),
-                        customMetrics = if (o.has("customMetrics")) o.getString("customMetrics") else null
+                        customMetrics = optNullableString(o, "customMetrics")
                     )
                 )
             }
@@ -308,7 +317,7 @@ object BackupHelper {
                         timestamp = o.optLong("timestamp", System.currentTimeMillis()),
                         durationSeconds = o.optLong("durationSeconds", 0),
                         totalRestSecondsUsed = o.optLong("totalRestSecondsUsed", 0),
-                        customData = if (o.has("customData")) o.getString("customData") else null
+                        customData = optNullableString(o, "customData")
                     )
                 )
             }
@@ -389,13 +398,13 @@ object BackupHelper {
                 measurements.add(
                     BodyMeasurement(
                         date = o.getString("date"),
-                        heightCm = if (o.has("heightCm")) o.getDouble("heightCm") else null,
-                        weightKg = if (o.has("weightKg")) o.getDouble("weightKg") else null,
-                        neckCm = if (o.has("neckCm")) o.getDouble("neckCm") else null,
-                        waistCm = if (o.has("waistCm")) o.getDouble("waistCm") else null,
-                        chestCm = if (o.has("chestCm")) o.getDouble("chestCm") else null,
-                        armsCm = if (o.has("armsCm")) o.getDouble("armsCm") else null,
-                        thighCm = if (o.has("thighCm")) o.getDouble("thighCm") else null,
+                        heightCm = optNullableDouble(o, "heightCm"),
+                        weightKg = optNullableDouble(o, "weightKg"),
+                        neckCm = optNullableDouble(o, "neckCm"),
+                        waistCm = optNullableDouble(o, "waistCm"),
+                        chestCm = optNullableDouble(o, "chestCm"),
+                        armsCm = optNullableDouble(o, "armsCm"),
+                        thighCm = optNullableDouble(o, "thighCm"),
                         timestamp = o.optLong("timestamp", System.currentTimeMillis())
                     )
                 )
@@ -520,14 +529,26 @@ object BackupHelper {
                 val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
                     ?: return false
 
-                resolver.openOutputStream(uri)?.use { out ->
-                    out.write(backupJson.toByteArray(Charsets.UTF_8))
-                } ?: return false
-
-                contentValues.clear()
-                contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                resolver.update(uri, contentValues, null, null)
-                true
+                try {
+                    val outStream = resolver.openOutputStream(uri)
+                    if (outStream == null) {
+                        resolver.delete(uri, null, null)
+                        return false
+                    }
+                    outStream.use { out ->
+                        out.write(backupJson.toByteArray(Charsets.UTF_8))
+                    }
+                    contentValues.clear()
+                    contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, contentValues, null, null)
+                    true
+                } catch (e: Exception) {
+                    try {
+                        resolver.delete(uri, null, null)
+                    } catch (_: Exception) {
+                    }
+                    throw e
+                }
             } else {
                 if (!hasLegacyStoragePermission(context)) return false
                 @Suppress("DEPRECATION")

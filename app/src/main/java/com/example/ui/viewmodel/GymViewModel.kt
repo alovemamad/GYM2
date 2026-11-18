@@ -68,6 +68,7 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            repository.syncSoundCache()
             repository.seedStarterPlanIfEmpty()
             ReminderScheduler.syncAllReminders(getApplication())
         }

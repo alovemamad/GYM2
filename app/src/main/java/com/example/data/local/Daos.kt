@@ -97,6 +97,9 @@ interface WorkoutDao {
 
     @Query("DELETE FROM workout_plan_skips WHERE planId = :planId AND originalDate = :originalDate")
     suspend fun deleteSkipForPlanAndDate(planId: Long, originalDate: String)
+
+    @Query("DELETE FROM workout_plan_skips WHERE planId = :planId")
+    suspend fun deleteSkipsForPlan(planId: Long)
 }
 
 @Dao

@@ -28,4 +28,14 @@ object ImageStorageHelper {
             sourceUri.toString()
         }
     }
+
+    fun deleteProfilePhoto(context: Context) {
+        try {
+            val file = File(context.filesDir, AVATAR_FILE_NAME)
+            if (file.exists()) {
+                file.delete()
+            }
+        } catch (_: Exception) {
+        }
+    }
 }

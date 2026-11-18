@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,7 +47,7 @@ fun NutritionScreen(
     onToggleSupplementActive: (Supplement) -> Unit,
     onToggleSupplementIntake: (Supplement, Boolean, String) -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: وعده‌ها و آب, 1: مکمل‌ها, 2: رژیم هوشمند
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0: وعده‌ها و آب, 1: مکمل‌ها, 2: رژیم هوشمند
 
     var breakfast by remember(currentNutritionLog) { mutableStateOf(currentNutritionLog?.breakfast ?: "") }
     var lunch by remember(currentNutritionLog) { mutableStateOf(currentNutritionLog?.lunch ?: "") }
@@ -62,9 +63,10 @@ fun NutritionScreen(
 
     val todayGregorian = remember { JalaliCalendar.getTodayGregorian() }
 
-    // Smart diet calculation
-    val weight = userSettings.weightKg ?: 75.0
-    val height = userSettings.heightCm ?: 175.0
+    // Smart diet calculation (Mifflin-St Jeor expects kg & cm)
+    val rawWeight = (userSettings.weightKg ?: 75.0).coerceAtLeast(1.0)
+    val weight = if (userSettings.weightUnit == "lb") rawWeight * 0.45359237 else rawWeight
+    val height = (userSettings.heightCm ?: 175.0).coerceAtLeast(50.0)
     val age = userSettings.age ?: 25
     val bmr = (10 * weight) + (6.25 * height) - (5 * age) + if (userSettings.gender == "FEMALE") -161 else 5
     val multiplier = when (userSettings.activityLevel) {
@@ -668,8 +670,8 @@ fun NutritionScreen(
                                     .height(44.dp)
                                     .liquidTapEffect {
                                         pickedMonth = mNum
-                                        if (mNum > 6 && pickedDay > 30) pickedDay = 30
-                                        if (mNum == 12 && pickedDay > 29) pickedDay = 29
+                                        val mDays = JalaliCalendar.getDaysInJalaliMonth(pickedYear, mNum)
+                                        if (pickedDay > mDays) pickedDay = mDays
                                     },
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isSel) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
@@ -687,11 +689,7 @@ fun NutritionScreen(
                     }
 
                     // Day selector row
-                    val maxDays = when {
-                        pickedMonth <= 6 -> 31
-                        pickedMonth <= 11 -> 30
-                        else -> 29
-                    }
+                    val maxDays = JalaliCalendar.getDaysInJalaliMonth(pickedYear, pickedMonth)
                     Text("روز (${PersianNumberHelper.toPersianDigits(pickedDay)}):", style = MaterialTheme.typography.labelSmall, color = LiquidTheme.textSecondary)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items((1..maxDays).toList()) { d ->

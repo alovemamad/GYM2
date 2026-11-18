@@ -33,6 +33,11 @@ import com.example.ui.theme.*
 import com.example.util.JalaliCalendar
 import com.example.util.PersianNumberHelper
 
+private data class EditableExerciseItem(
+    val uiId: Long,
+    val exercise: WorkoutExercise
+)
+
 @Composable
 fun PlanEditorScreen(
     initialPlan: WorkoutPlan?,
@@ -47,13 +52,24 @@ fun PlanEditorScreen(
     }
     var selectedDays by remember { mutableStateOf(initialDays) }
 
-    var exercises by remember {
+    var nextExerciseUiId by remember {
+        mutableLongStateOf((initialExercises.size + 2).toLong())
+    }
+    var exerciseItems by remember {
         mutableStateOf(
-            if (initialExercises.isNotEmpty()) initialExercises else listOf(
-                WorkoutExercise(planId = 0, name = "", sets = 3, reps = 10, weight = 20.0)
-            )
+            if (initialExercises.isNotEmpty()) {
+                initialExercises.mapIndexed { idx, ex -> EditableExerciseItem(uiId = (idx + 1).toLong(), exercise = ex) }
+            } else {
+                listOf(
+                    EditableExerciseItem(
+                        uiId = 1L,
+                        exercise = WorkoutExercise(planId = 0, name = "", sets = 3, reps = 10, weight = 20.0)
+                    )
+                )
+            }
         )
     }
+    val exercises by remember { derivedStateOf { exerciseItems.map { it.exercise } } }
 
     val weekDays = JalaliCalendar.WEEKDAY_NAMES
 
@@ -234,12 +250,16 @@ fun PlanEditorScreen(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .clickable {
-                                exercises = exercises + WorkoutExercise(
-                                    planId = initialPlan?.id ?: 0,
-                                    name = "",
-                                    sets = 3,
-                                    reps = 10,
-                                    weight = 0.0
+                                val newId = nextExerciseUiId++
+                                exerciseItems = exerciseItems + EditableExerciseItem(
+                                    uiId = newId,
+                                    exercise = WorkoutExercise(
+                                        planId = initialPlan?.id ?: 0,
+                                        name = "",
+                                        sets = 3,
+                                        reps = 10,
+                                        weight = 0.0
+                                    )
                                 )
                             }
                             .padding(end = 16.dp)
@@ -247,8 +267,9 @@ fun PlanEditorScreen(
                 }
             }
 
-            itemsIndexed(exercises) { index, exercise ->
-                var expanded by remember { mutableStateOf(true) }
+            itemsIndexed(exerciseItems, key = { _, item -> item.uiId }) { index, item ->
+                val exercise = item.exercise
+                var expanded by remember(item.uiId) { mutableStateOf(true) }
 
                 SolidGroupedCard(
                     shape = RoundedCornerShape(20.dp)
@@ -298,11 +319,11 @@ fun PlanEditorScreen(
                                 if (index > 0) {
                                     IconButton(
                                         onClick = {
-                                            val list = exercises.toMutableList()
+                                            val list = exerciseItems.toMutableList()
                                             val temp = list[index]
                                             list[index] = list[index - 1]
                                             list[index - 1] = temp
-                                            exercises = list
+                                            exerciseItems = list
                                         },
                                         modifier = Modifier.size(32.dp)
                                     ) {
@@ -311,14 +332,14 @@ fun PlanEditorScreen(
                                 }
 
                                 // Move Down
-                                if (index < exercises.size - 1) {
+                                if (index < exerciseItems.size - 1) {
                                     IconButton(
                                         onClick = {
-                                            val list = exercises.toMutableList()
+                                            val list = exerciseItems.toMutableList()
                                             val temp = list[index]
                                             list[index] = list[index + 1]
                                             list[index + 1] = temp
-                                            exercises = list
+                                            exerciseItems = list
                                         },
                                         modifier = Modifier.size(32.dp)
                                     ) {
@@ -329,9 +350,13 @@ fun PlanEditorScreen(
                                 // Duplicate / Clone
                                 IconButton(
                                     onClick = {
-                                        val list = exercises.toMutableList()
-                                        list.add(index + 1, exercise.copy(name = if (exercise.name.isNotBlank()) "${exercise.name} (کپی)" else ""))
-                                        exercises = list
+                                        val list = exerciseItems.toMutableList()
+                                        val copyEx = exercise.copy(
+                                            id = 0,
+                                            name = if (exercise.name.isNotBlank()) "${exercise.name} (کپی)" else ""
+                                        )
+                                        list.add(index + 1, EditableExerciseItem(uiId = nextExerciseUiId++, exercise = copyEx))
+                                        exerciseItems = list
                                     },
                                     modifier = Modifier.size(32.dp)
                                 ) {
@@ -341,7 +366,7 @@ fun PlanEditorScreen(
                                 // Delete
                                 IconButton(
                                     onClick = {
-                                        exercises = exercises.filterIndexed { i, _ -> i != index }
+                                        exerciseItems = exerciseItems.filterIndexed { i, _ -> i != index }
                                     },
                                     modifier = Modifier.size(32.dp)
                                 ) {
@@ -370,8 +395,8 @@ fun PlanEditorScreen(
                                 LiquidInputField(
                                     value = exercise.name,
                                     onValueChange = { newName ->
-                                        exercises = exercises.mapIndexed { i, ex ->
-                                            if (i == index) ex.copy(name = newName) else ex
+                                        exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                            if (i == index) it.copy(exercise = it.exercise.copy(name = newName)) else it
                                         }
                                     },
                                     label = "نام حرکت",
@@ -389,8 +414,8 @@ fun PlanEditorScreen(
                                         LiquidStepper(
                                             value = exercise.sets.toDouble(),
                                             onValueChange = { newSets ->
-                                                exercises = exercises.mapIndexed { i, ex ->
-                                                    if (i == index) ex.copy(sets = newSets.toInt()) else ex
+                                                exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                                    if (i == index) it.copy(exercise = it.exercise.copy(sets = newSets.toInt())) else it
                                                 }
                                             },
                                             step = 1.0,
@@ -448,11 +473,14 @@ fun PlanEditorScreen(
                                     LiquidSwitch(
                                         checked = exercise.isTimedExercise,
                                         onCheckedChange = { isTimed ->
-                                            exercises = exercises.mapIndexed { i, ex ->
-                                                if (i == index) ex.copy(
-                                                    isTimedExercise = isTimed,
-                                                    reps = if (isTimed && ex.reps < 10) 60 else ex.reps
-                                                ) else ex
+                                            exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                                if (i == index) it.copy(
+                                                    exercise = it.exercise.copy(
+                                                        isTimedExercise = isTimed,
+                                                        reps = if (isTimed && it.exercise.reps < 10) 60 else it.exercise.reps,
+                                                        repsMax = if (isTimed) null else it.exercise.repsMax
+                                                    )
+                                                ) else it
                                             }
                                         }
                                     )
@@ -474,8 +502,8 @@ fun PlanEditorScreen(
                                             LiquidStepper(
                                                 value = exercise.reps.toDouble(),
                                                 onValueChange = { newSec ->
-                                                    exercises = exercises.mapIndexed { i, ex ->
-                                                        if (i == index) ex.copy(reps = newSec.toInt()) else ex
+                                                    exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                                        if (i == index) it.copy(exercise = it.exercise.copy(reps = newSec.toInt())) else it
                                                     }
                                                 },
                                                 step = 5.0,
@@ -496,8 +524,8 @@ fun PlanEditorScreen(
                                                         .weight(1f)
                                                         .height(40.dp)
                                                         .liquidTapEffect {
-                                                            exercises = exercises.mapIndexed { i, ex ->
-                                                                if (i == index) ex.copy(reps = sec) else ex
+                                                            exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                                                if (i == index) it.copy(exercise = it.exercise.copy(reps = sec)) else it
                                                             }
                                                         },
                                                     shape = RoundedCornerShape(8.dp),
@@ -531,8 +559,17 @@ fun PlanEditorScreen(
                                             LiquidStepper(
                                                 value = exercise.reps.toDouble(),
                                                 onValueChange = { newReps ->
-                                                    exercises = exercises.mapIndexed { i, ex ->
-                                                        if (i == index) ex.copy(reps = newReps.toInt()) else ex
+                                                    val r = newReps.toInt()
+                                                    exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                                        if (i == index) {
+                                                            val curMax = it.exercise.repsMax
+                                                            it.copy(
+                                                                exercise = it.exercise.copy(
+                                                                    reps = r,
+                                                                    repsMax = if (curMax != null && curMax <= r) null else curMax
+                                                                )
+                                                            )
+                                                        } else it
                                                     }
                                                 },
                                                 step = 1.0,
@@ -564,8 +601,12 @@ fun PlanEditorScreen(
                                             LiquidStepper(
                                                 value = (exercise.repsMax ?: exercise.reps).toDouble(),
                                                 onValueChange = { newMax ->
-                                                    exercises = exercises.mapIndexed { i, ex ->
-                                                        if (i == index) ex.copy(repsMax = if (newMax.toInt() > ex.reps) newMax.toInt() else null) else ex
+                                                    exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                                        if (i == index) it.copy(
+                                                            exercise = it.exercise.copy(
+                                                                repsMax = if (newMax.toInt() > it.exercise.reps) newMax.toInt() else null
+                                                            )
+                                                        ) else it
                                                     }
                                                 },
                                                 step = 1.0,
@@ -588,8 +629,8 @@ fun PlanEditorScreen(
                                     LiquidStepper(
                                         value = exercise.weight,
                                         onValueChange = { newWeight ->
-                                            exercises = exercises.mapIndexed { i, ex ->
-                                                if (i == index) ex.copy(weight = newWeight) else ex
+                                            exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                                if (i == index) it.copy(exercise = it.exercise.copy(weight = newWeight)) else it
                                             }
                                         },
                                         step = 2.5,
@@ -601,8 +642,8 @@ fun PlanEditorScreen(
                                 LiquidInputField(
                                     value = exercise.notes,
                                     onValueChange = { newNotes ->
-                                        exercises = exercises.mapIndexed { i, ex ->
-                                            if (i == index) ex.copy(notes = newNotes) else ex
+                                        exerciseItems = exerciseItems.mapIndexed { i, it ->
+                                            if (i == index) it.copy(exercise = it.exercise.copy(notes = newNotes)) else it
                                         }
                                     },
                                     label = "نکات حرکت (اختیاری)",
@@ -690,13 +731,16 @@ fun PlanEditorScreen(
                                     modifier = Modifier
                                         .liquidTapEffect {
                                             val isTimed = exName.contains("پلانک")
-                                            exercises = exercises + WorkoutExercise(
-                                                planId = initialPlan?.id ?: 0,
-                                                name = exName,
-                                                sets = if (isTimed) 3 else 4,
-                                                reps = if (isTimed) 60 else 10,
-                                                weight = if (isTimed) 0.0 else 20.0,
-                                                isTimedExercise = isTimed
+                                            exerciseItems = exerciseItems + EditableExerciseItem(
+                                                uiId = nextExerciseUiId++,
+                                                exercise = WorkoutExercise(
+                                                    planId = initialPlan?.id ?: 0,
+                                                    name = exName,
+                                                    sets = if (isTimed) 3 else 4,
+                                                    reps = if (isTimed) 60 else 10,
+                                                    weight = if (isTimed) 0.0 else 20.0,
+                                                    isTimedExercise = isTimed
+                                                )
                                             )
                                         },
                                     shape = RoundedCornerShape(12.dp),
@@ -734,12 +778,15 @@ fun PlanEditorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .liquidTapEffect {
-                            exercises = exercises + WorkoutExercise(
-                                planId = initialPlan?.id ?: 0,
-                                name = "",
-                                sets = 3,
-                                reps = 10,
-                                weight = 0.0
+                            exerciseItems = exerciseItems + EditableExerciseItem(
+                                uiId = nextExerciseUiId++,
+                                exercise = WorkoutExercise(
+                                    planId = initialPlan?.id ?: 0,
+                                    name = "",
+                                    sets = 3,
+                                    reps = 10,
+                                    weight = 0.0
+                                )
                             )
                         },
                     shape = RoundedCornerShape(18.dp),

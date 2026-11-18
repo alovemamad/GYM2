@@ -89,6 +89,7 @@ object NotificationHelper {
     val CHANNEL_REMINDERS = AlertType.WORKOUT.channelId
 
     private val LEGACY_CHANNELS = listOf("channel_gym_reminders", "channel_gym_rest_timer")
+    private val playerLock = Any()
     private var activePlayer: MediaPlayer? = null
 
     private fun soundUri(context: Context, type: AlertType): Uri =
@@ -152,40 +153,59 @@ object NotificationHelper {
         val shouldPlayAudio = (overrideVolume != null || soundConfig.inAppSoundsEnabled) && rawVolume > 0.01f
 
         if (shouldPlayAudio) {
-            try {
-                // منحنی ادراکی صدا برای اینکه تغییر درصد ولوم کاملاً محسوس باشد
-                val normalized = rawVolume.coerceIn(0f, 1f)
-                val gain = (normalized * normalized * 0.7f + normalized * 0.3f).coerceIn(0f, 1f)
-
+            synchronized(playerLock) {
+                var newPlayer: MediaPlayer? = null
                 try {
-                    activePlayer?.let { prev ->
-                        if (prev.isPlaying) prev.stop()
-                        prev.release()
+                    // منحنی ادراکی صدا برای اینکه تغییر درصد ولوم کاملاً محسوس باشد
+                    val normalized = rawVolume.coerceIn(0f, 1f)
+                    val gain = (normalized * normalized * 0.7f + normalized * 0.3f).coerceIn(0f, 1f)
+
+                    try {
+                        activePlayer?.let { prev ->
+                            if (prev.isPlaying) prev.stop()
+                            prev.release()
+                        }
+                    } catch (_: Exception) {
+                    }
+                    activePlayer = null
+
+                    context.resources.openRawResourceFd(type.soundRes)?.use { afd ->
+                        newPlayer = MediaPlayer().apply {
+                            setAudioAttributes(audioAttributes(type))
+                            setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                            setOnCompletionListener { mp ->
+                                synchronized(playerLock) {
+                                    if (activePlayer === mp) activePlayer = null
+                                }
+                                try {
+                                    mp.release()
+                                } catch (_: Exception) {
+                                }
+                            }
+                            setOnErrorListener { mp, _, _ ->
+                                synchronized(playerLock) {
+                                    if (activePlayer === mp) activePlayer = null
+                                }
+                                try {
+                                    mp.release()
+                                } catch (_: Exception) {
+                                }
+                                true
+                            }
+                            prepare()
+                            setVolume(gain, gain)
+                            start()
+                        }
+                        activePlayer = newPlayer
                     }
                 } catch (_: Exception) {
-                }
-                activePlayer = null
-
-                val afd = context.resources.openRawResourceFd(type.soundRes)
-                val player = MediaPlayer().apply {
-                    setAudioAttributes(audioAttributes(type))
-                    setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                    setOnCompletionListener { mp ->
-                        if (activePlayer === mp) activePlayer = null
-                        mp.release()
+                    if (newPlayer != null && activePlayer !== newPlayer) {
+                        try {
+                            newPlayer?.release()
+                        } catch (_: Exception) {
+                        }
                     }
-                    setOnErrorListener { mp, _, _ ->
-                        if (activePlayer === mp) activePlayer = null
-                        mp.release()
-                        true
-                    }
-                    prepare()
-                    setVolume(gain, gain)
-                    start()
                 }
-                activePlayer = player
-                afd.close()
-            } catch (_: Exception) {
             }
         }
 

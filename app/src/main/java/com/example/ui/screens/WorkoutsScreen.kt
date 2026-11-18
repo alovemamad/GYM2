@@ -79,7 +79,10 @@ fun WorkoutsScreen(
 
     val (todayPlans, otherPlans) = remember(filteredPlans, todayWeekday, allSkips, todayGregorian) {
         val postponedToToday = allSkips.filter { it.newDate == todayGregorian }.map { it.planId }
-        val skippedToday = allSkips.filter { it.originalDate == todayGregorian && it.newDate == null }.map { it.planId }
+        val skippedToday = allSkips.filter {
+            (it.originalDate == todayGregorian && it.newDate == null) ||
+                (it.originalDate == todayGregorian && it.newDate != todayGregorian)
+        }.map { it.planId }
 
         filteredPlans.partition { plan ->
             (plan.scheduledDay.contains(todayWeekday) || postponedToToday.contains(plan.id)) && !skippedToday.contains(plan.id)

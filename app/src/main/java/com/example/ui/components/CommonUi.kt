@@ -834,7 +834,7 @@ fun LiquidCircleButton(
 ) {
     Box(
         modifier = modifier
-            .size(46.dp)
+            .size(48.dp)
             .liquidGlass(shape = CircleShape, elevation = 4.dp)
             .liquidTapEffect { onClick() },
         contentAlignment = Alignment.Center
@@ -940,7 +940,7 @@ fun LiquidStepper(
                 if (step >= 1.0 && value % 1.0 == 0.0) {
                     PersianNumberHelper.toPersianDigits(value.toInt())
                 } else {
-                    PersianNumberHelper.toPersianDigits(String.format(formatString, value))
+                    PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, formatString, value))
                 },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
@@ -1047,17 +1047,17 @@ fun LiquidInputField(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(60.dp)
+            .heightIn(min = 60.dp)
             .liquidGlass(
                 shape = RoundedCornerShape(18.dp),
                 elevation = if (isFocused) 6.dp else 3.dp,
                 borderAlpha = if (isFocused) 0.8f else 0.35f
             )
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart
+            .padding(horizontal = 16.dp, vertical = if (singleLine) 0.dp else 10.dp),
+        contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
             modifier = Modifier.fillMaxWidth()
         ) {
             if (leadingIcon != null) {
@@ -1624,9 +1624,9 @@ fun LiquidTimePickerDialog(
     onDismissRequest: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    val parts = initialTime.split(":")
-    val initialH = parts.getOrNull(0)?.toIntOrNull() ?: 8
-    val initialM = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val parts = PersianNumberHelper.toEnglishDigits(initialTime.trim()).split(":")
+    val initialH = (parts.getOrNull(0)?.trim()?.toIntOrNull() ?: 8).coerceIn(0, 23)
+    val initialM = (parts.getOrNull(1)?.trim()?.toIntOrNull() ?: 0).coerceIn(0, 59)
 
     var hour by remember { mutableIntStateOf(initialH) }
     var minute by remember { mutableIntStateOf(initialM) }
@@ -1638,7 +1638,7 @@ fun LiquidTimePickerDialog(
         message = "با کشیدن انگشت به بالا/پایین یا دکمه‌ها، ساعت را تنظیم کنید",
         confirmText = "تایید",
         onConfirm = {
-            val formatted = String.format("%02d:%02d", hour, minute)
+            val formatted = String.format(java.util.Locale.US, "%02d:%02d", hour, minute)
             onConfirm(formatted)
         },
         dismissText = "انصراف"
@@ -1691,7 +1691,7 @@ fun LiquidTimePickerDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        PersianNumberHelper.toPersianDigits(String.format("%02d", minute)),
+                        PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%02d", minute)),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = LiquidTheme.textPrimary
@@ -1759,7 +1759,7 @@ fun LiquidTimePickerDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        PersianNumberHelper.toPersianDigits(String.format("%02d", hour)),
+                        PersianNumberHelper.toPersianDigits(String.format(java.util.Locale.US, "%02d", hour)),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = LiquidTheme.textPrimary

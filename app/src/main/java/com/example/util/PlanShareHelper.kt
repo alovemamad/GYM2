@@ -136,12 +136,16 @@ object PlanShareHelper {
                                     name = wItem.optString("name", wItem.optString("workout_name", "حرکت")),
                                     sets = wItem.optInt("sets", 3),
                                     reps = wItem.optInt("reps", 10),
-                                    repsMax = if (wItem.has("reps_max")) wItem.optInt("reps_max") else if (wItem.has("repsMax")) wItem.optInt("repsMax") else null,
+                                    repsMax = when {
+                                        wItem.has("reps_max") && !wItem.isNull("reps_max") -> wItem.optInt("reps_max")
+                                        wItem.has("repsMax") && !wItem.isNull("repsMax") -> wItem.optInt("repsMax")
+                                        else -> null
+                                    },
                                     weight = wItem.optDouble("weight", 0.0),
                                     notes = wItem.optString("notes", ""),
-                                    supersetGroup = if (wItem.has("supersetGroup")) wItem.getString("supersetGroup") else null,
+                                    supersetGroup = if (wItem.has("supersetGroup") && !wItem.isNull("supersetGroup")) wItem.getString("supersetGroup") else null,
                                     isTimedExercise = wItem.optBoolean("is_timed", wItem.optBoolean("isTimedExercise", false)),
-                                    customMetrics = if (wItem.has("customMetrics")) wItem.getString("customMetrics") else null
+                                    customMetrics = if (wItem.has("customMetrics") && !wItem.isNull("customMetrics")) wItem.getString("customMetrics") else null
                                 )
                             )
                         } else if (wItem is String && wItem.isNotBlank()) {
@@ -195,12 +199,16 @@ object PlanShareHelper {
                             name = name,
                             sets = item.optInt("sets", 3),
                             reps = item.optInt("reps", 10),
-                            repsMax = if (item.has("reps_max")) item.optInt("reps_max") else if (item.has("repsMax")) item.optInt("repsMax") else null,
+                            repsMax = when {
+                                item.has("reps_max") && !item.isNull("reps_max") -> item.optInt("reps_max")
+                                item.has("repsMax") && !item.isNull("repsMax") -> item.optInt("repsMax")
+                                else -> null
+                            },
                             weight = item.optDouble("weight", 0.0),
                             notes = item.optString("notes", ""),
-                            supersetGroup = if (item.has("supersetGroup")) item.getString("supersetGroup") else null,
+                            supersetGroup = if (item.has("supersetGroup") && !item.isNull("supersetGroup")) item.getString("supersetGroup") else null,
                             isTimedExercise = item.optBoolean("is_timed", item.optBoolean("isTimedExercise", false)),
-                            customMetrics = if (item.has("customMetrics")) item.getString("customMetrics") else null
+                            customMetrics = if (item.has("customMetrics") && !item.isNull("customMetrics")) item.getString("customMetrics") else null
                         )
                     )
                 }

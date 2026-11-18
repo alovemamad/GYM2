@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,11 +56,15 @@ fun AnalysisScreen(
     onSaveMeasurement: (BodyMeasurement) -> Unit,
     onDeleteMeasurement: (String) -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: سایز و وزن, 1: ماشین‌حساب وزن و BMR, 2: نمودارها
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) } // 0: سایز و وزن, 1: ماشین‌حساب وزن و BMR, 2: نمودارها
     var showAddMeasurementDialog by remember { mutableStateOf(false) }
 
-    val latest = allMeasurements.maxByOrNull { it.timestamp }
-    val orderedMeasurements = remember(allMeasurements) { allMeasurements.sortedBy { it.date } }
+    val latest = remember(allMeasurements) {
+        allMeasurements.maxWithOrNull(compareBy<BodyMeasurement> { it.date }.thenBy { it.timestamp })
+    }
+    val orderedMeasurements = remember(allMeasurements) {
+        allMeasurements.sortedWith(compareBy<BodyMeasurement> { it.date }.thenBy { it.timestamp })
+    }
     val currentWeight = latest?.weightKg ?: userSettings.weightKg
     val currentHeight = latest?.heightCm ?: userSettings.heightCm
 
@@ -173,7 +178,9 @@ fun AnalysisScreen(
                                 LiquidSectionHeader(title = "سوابق ثبت‌های قبلی")
 
                                 SolidGroupedCard {
-                                    allMeasurements.sortedByDescending { it.timestamp }.forEachIndexed { index, m ->
+                                    allMeasurements
+                                        .sortedWith(compareByDescending<BodyMeasurement> { it.date }.thenByDescending { it.timestamp })
+                                        .forEachIndexed { index, m ->
                                         val jDate = JalaliCalendar.formatGregorianToPersian(m.date)
                                         val sub = buildString {
                                             if (m.weightKg != null) append("وزن: ${PersianNumberHelper.toPersianDigits(m.weightKg)} ")
@@ -218,7 +225,7 @@ fun AnalysisScreen(
                     val age = userSettings.age ?: 25
                     val gender = userSettings.gender
 
-                    if (w == null || h == null) {
+                    if (w == null || h == null || w <= 0.0 || h <= 0.0) {
                         EmptyStateCard(
                             icon = Icons.Filled.Calculate,
                             title = "اطلاعات قد و وزن وارد نشده است",
@@ -227,9 +234,10 @@ fun AnalysisScreen(
                             onActionClick = { showAddMeasurementDialog = true }
                         )
                     } else {
+                        val weightInKg = if (userSettings.weightUnit == "lb") w * 0.45359237 else w
                         val idealWeightMin = 18.5 * (h / 100.0) * (h / 100.0)
                         val idealWeightMax = 24.9 * (h / 100.0) * (h / 100.0)
-                        val bmi = w / ((h / 100.0) * (h / 100.0))
+                        val bmi = weightInKg / ((h / 100.0) * (h / 100.0))
 
                         val bmiStatus = when {
                             bmi < 18.5 -> "کمبود وزن (لاغر)"
@@ -239,16 +247,16 @@ fun AnalysisScreen(
                         }
 
                         // Mifflin-St Jeor formula (Standard gold standard)
-                        val bmr = (10.0 * w) + (6.25 * h) - (5.0 * age) + if (gender == "FEMALE") -161.0 else 5.0
+                        val bmr = (10.0 * weightInKg) + (6.25 * h) - (5.0 * age) + if (gender == "FEMALE") -161.0 else 5.0
 
                         // Physical Activity Level multiplier
                         val activityMultiplier = when (userSettings.activityLevel) {
                             "SEDENTARY" -> 1.2
-                            "LIGHT" -> 1.375
-                            "MODERATE" -> 1.55
-                            "ACTIVE" -> 1.725
-                            "VERY_ACTIVE", "ATHLETE" -> 1.9
-                            else -> 1.4
+                            "LIGHT", "MODERATE" -> 1.375
+                            "ACTIVE" -> 1.55
+                            "ATHLETE" -> 1.725
+                            "VERY_ACTIVE" -> 1.9
+                            else -> 1.375
                         }
                         val tdee = bmr * activityMultiplier
 
@@ -262,20 +270,33 @@ fun AnalysisScreen(
                         // Estimated Body Fat % (US Navy formula if waist available, otherwise Deurenberg BMI)
                         val waist = latest?.waistCm
                         val neck = latest?.neckCm ?: (if (gender == "FEMALE") 33.0 else 38.0)
-                        val bodyFat = if (waist != null && waist > neck) {
-                            if (gender == "FEMALE") {
-                                val hip = latest?.thighCm?.let { it * 1.5 } ?: (waist * 1.15)
-                                (495.0 / (1.29579 - 0.35004 * kotlin.math.log10(waist + hip - neck) + 0.22100 * kotlin.math.log10(h)) - 450.0).coerceIn(12.0, 48.0)
+                        val deurenbergFallback = ((1.20 * bmi) + (0.23 * age) - (10.8 * if (gender == "FEMALE") 0.0 else 1.0) - 5.4).coerceIn(7.0, 45.0)
+                        val bodyFat = if (waist != null && waist > neck + 1.0) {
+                            val rawNavy = if (gender == "FEMALE") {
+                                val hip = latest?.thighCm?.takeIf { it > 0.0 }?.let { it * 1.5 } ?: (waist * 1.15)
+                                val circ = waist + hip - neck
+                                if (circ > 1.0) {
+                                    val denom = 1.29579 - 0.35004 * kotlin.math.log10(circ) + 0.22100 * kotlin.math.log10(h)
+                                    if (denom > 0.1) (495.0 / denom) - 450.0 else Double.NaN
+                                } else Double.NaN
                             } else {
-                                (495.0 / (1.0324 - 0.19077 * kotlin.math.log10(waist - neck) + 0.15456 * kotlin.math.log10(h)) - 450.0).coerceIn(6.0, 45.0)
+                                val diff = waist - neck
+                                if (diff > 1.0) {
+                                    val denom = 1.0324 - 0.19077 * kotlin.math.log10(diff) + 0.15456 * kotlin.math.log10(h)
+                                    if (denom > 0.1) (495.0 / denom) - 450.0 else Double.NaN
+                                } else Double.NaN
+                            }
+                            if (rawNavy.isFinite()) {
+                                rawNavy.coerceIn(if (gender == "FEMALE") 12.0 else 6.0, 48.0)
+                            } else {
+                                deurenbergFallback
                             }
                         } else {
-                            val genderFactor = if (gender == "FEMALE") 0.0 else 1.0
-                            ((1.20 * bmi) + (0.23 * age) - (10.8 * genderFactor) - 5.4).coerceIn(7.0, 45.0)
+                            deurenbergFallback
                         }
 
                         // FFMI (Fat-Free Mass Index) - The bodybuilder gold standard
-                        val leanMassKg = w * (1.0 - (bodyFat / 100.0))
+                        val leanMassKg = weightInKg * (1.0 - (bodyFat / 100.0))
                         val ffmi = (leanMassKg / ((h / 100.0) * (h / 100.0))) + 6.1 * (1.8 - (h / 100.0))
                         val ffmiStatus = when {
                             ffmi < 18.0 -> "پایین / غیرورزشکار"
@@ -286,8 +307,8 @@ fun AnalysisScreen(
                         }
 
                         // Daily Macronutrients
-                        val targetProtein = (w * 2.1).toInt()
-                        val targetFat = (w * 0.9).toInt()
+                        val targetProtein = (weightInKg * 2.1).toInt()
+                        val targetFat = (weightInKg * 0.9).toInt()
                         val targetCarbs = ((targetCalories - (targetProtein * 4 + targetFat * 9)) / 4.0).toInt().coerceAtLeast(80)
 
                         Column(
@@ -493,13 +514,14 @@ fun AnalysisScreen(
 
                 item {
                     val userH = userSettings.heightCm
-                    val bmiPoints = remember(orderedMeasurements, userH) {
+                    val bmiPoints = remember(orderedMeasurements, userH, userSettings.weightUnit) {
                         orderedMeasurements.mapNotNull { m ->
-                            val w = m.weightKg ?: return@mapNotNull null
+                            val rawW = m.weightKg ?: return@mapNotNull null
+                            val wKg = if (userSettings.weightUnit == "lb") rawW * 0.45359237 else rawW
                             val hVal = m.heightCm ?: userH ?: return@mapNotNull null
-                            if (hVal <= 0.0) return@mapNotNull null
+                            if (wKg <= 0.0 || hVal <= 0.0) return@mapNotNull null
                             val hM = hVal / 100.0
-                            ChartDataBuilder.toChartPoint(m.date, w / (hM * hM))
+                            ChartDataBuilder.toChartPoint(m.date, wKg / (hM * hM))
                         }
                     }
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -579,18 +601,27 @@ fun AnalysisScreen(
             confirmText = "ذخیره در سوابق",
             dismissText = "انصراف",
             onConfirm = {
-                val m = BodyMeasurement(
-                    date = date,
-                    heightCm = heightStr.toDoubleOrNull(),
-                    weightKg = weightStr.toDoubleOrNull(),
-                    neckCm = neckStr.toDoubleOrNull(),
-                    waistCm = waistStr.toDoubleOrNull(),
-                    chestCm = chestStr.toDoubleOrNull(),
-                    armsCm = armsStr.toDoubleOrNull(),
-                    thighCm = thighStr.toDoubleOrNull(),
-                    timestamp = System.currentTimeMillis()
-                )
-                onSaveMeasurement(m)
+                val parsedWeight = weightStr.toDoubleOrNull()?.takeIf { it > 0.0 }
+                val parsedHeight = heightStr.toDoubleOrNull()?.takeIf { it > 0.0 }
+                val parsedNeck = neckStr.toDoubleOrNull()?.takeIf { it > 0.0 }
+                val parsedWaist = waistStr.toDoubleOrNull()?.takeIf { it > 0.0 }
+                val parsedChest = chestStr.toDoubleOrNull()?.takeIf { it > 0.0 }
+                val parsedArms = armsStr.toDoubleOrNull()?.takeIf { it > 0.0 }
+                val parsedThigh = thighStr.toDoubleOrNull()?.takeIf { it > 0.0 }
+                if (listOf(parsedWeight, parsedHeight, parsedNeck, parsedWaist, parsedChest, parsedArms, parsedThigh).any { it != null }) {
+                    val m = BodyMeasurement(
+                        date = date,
+                        heightCm = parsedHeight,
+                        weightKg = parsedWeight,
+                        neckCm = parsedNeck,
+                        waistCm = parsedWaist,
+                        chestCm = parsedChest,
+                        armsCm = parsedArms,
+                        thighCm = parsedThigh,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    onSaveMeasurement(m)
+                }
             },
             content = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class ActiveExerciseState(
@@ -182,6 +184,8 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     private var workoutTimerJob: Job? = null
     private var restTimerJob: Job? = null
     private var exerciseTimerJob: Job? = null
+    private var restEndMillis: Long = 0L
+    private val saveMutex = Mutex()
     private val pendingSaveJobs = mutableMapOf<Pair<Int, Int>, Job>()
 
     init {
@@ -208,9 +212,10 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             startWorkoutTicker()
 
             val savedRestEndMs = sessionPrefs.getLong(KEY_REST_END_MS, 0L)
-            val remSec = ((savedRestEndMs - System.currentTimeMillis()) / 1000L).toInt()
-            if (remSec > 0) {
-                launchRestCountdown(remSec)
+            if (savedRestEndMs > System.currentTimeMillis()) {
+                launchRestCountdown(savedRestEndMs)
+            } else if (savedRestEndMs > 0L) {
+                saveRestEndMillis(0L)
             }
         } catch (_: Exception) {
         }
@@ -312,34 +317,36 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private suspend fun persistSetImmediate(exerciseIndex: Int, setIndex: Int) {
-        val exState = _exercisesState.value.getOrNull(exerciseIndex) ?: return
-        val s = exState.sets.getOrNull(setIndex) ?: return
-        val customStr = s.customValues.entries.joinToString(";") { "${it.key}:${it.value}" }
-        val log = WorkoutSetLog(
-            id = s.setLogId,
-            date = _workoutDate.value,
-            planId = _currentPlanId.value ?: 0L,
-            planName = _currentPlanName.value,
-            exerciseName = exState.exercise.name,
-            setNumber = s.setNumber,
-            weight = s.weight,
-            reps = s.reps,
-            completed = s.completed,
-            timestamp = System.currentTimeMillis(),
-            restSecondsUsed = s.restUsedSeconds,
-            customMetricValues = customStr
-        )
-        val insertedId = workoutDao.insertSetLog(log)
-        if (s.setLogId == 0L && insertedId > 0L) {
-            _exercisesState.update { currentList ->
-                val curEx = currentList.getOrNull(exerciseIndex) ?: return@update currentList
-                val curSet = curEx.sets.getOrNull(setIndex) ?: return@update currentList
-                if (curSet.setLogId == insertedId) return@update currentList
-                val newSets = curEx.sets.toMutableList()
-                newSets[setIndex] = curSet.copy(setLogId = insertedId)
-                val newList = currentList.toMutableList()
-                newList[exerciseIndex] = curEx.copy(sets = newSets)
-                newList
+        saveMutex.withLock {
+            val exState = _exercisesState.value.getOrNull(exerciseIndex) ?: return@withLock
+            val s = exState.sets.getOrNull(setIndex) ?: return@withLock
+            val customStr = s.customValues.entries.joinToString(";") { "${it.key}:${it.value}" }
+            val log = WorkoutSetLog(
+                id = s.setLogId,
+                date = _workoutDate.value,
+                planId = _currentPlanId.value ?: 0L,
+                planName = _currentPlanName.value,
+                exerciseName = exState.exercise.name,
+                setNumber = s.setNumber,
+                weight = s.weight,
+                reps = s.reps,
+                completed = s.completed,
+                timestamp = System.currentTimeMillis(),
+                restSecondsUsed = s.restUsedSeconds,
+                customMetricValues = customStr
+            )
+            val insertedId = workoutDao.insertSetLog(log)
+            if (s.setLogId == 0L && insertedId > 0L) {
+                _exercisesState.update { currentList ->
+                    val curEx = currentList.getOrNull(exerciseIndex) ?: return@update currentList
+                    val curSet = curEx.sets.getOrNull(setIndex) ?: return@update currentList
+                    if (curSet.setLogId == insertedId) return@update currentList
+                    val newSets = curEx.sets.toMutableList()
+                    newSets[setIndex] = curSet.copy(setLogId = insertedId)
+                    val newList = currentList.toMutableList()
+                    newList[exerciseIndex] = curEx.copy(sets = newSets)
+                    newList
+                }
             }
         }
     }
@@ -427,22 +434,31 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     fun toggleExerciseTimer(exerciseIndex: Int, setIndex: Int) {
         var willBeActive = false
         _exercisesState.update { list ->
-            val ex = list.getOrNull(exerciseIndex) ?: return@update list
-            val s = ex.sets.getOrNull(setIndex) ?: return@update list
-            willBeActive = !s.isTimerActive
-            val initialDuration = if (s.timerSecondsRemaining <= 0) {
-                if (ex.exercise.isTimedExercise && ex.exercise.reps > 0) ex.exercise.reps else 60
+            val targetEx = list.getOrNull(exerciseIndex) ?: return@update list
+            val targetSet = targetEx.sets.getOrNull(setIndex) ?: return@update list
+            willBeActive = !targetSet.isTimerActive
+            val initialDuration = if (targetSet.timerSecondsRemaining <= 0) {
+                if (targetEx.exercise.isTimedExercise && targetEx.exercise.reps > 0) targetEx.exercise.reps else 60
             } else {
-                s.timerSecondsRemaining
+                targetSet.timerSecondsRemaining
             }
-            val sets = ex.sets.toMutableList()
-            sets[setIndex] = s.copy(
-                isTimerActive = willBeActive,
-                timerSecondsRemaining = initialDuration
-            )
-            val newList = list.toMutableList()
-            newList[exerciseIndex] = ex.copy(sets = sets)
-            newList
+            list.mapIndexed { eIdx, ex ->
+                val needsClear = willBeActive && ex.sets.any { it.isTimerActive }
+                if (eIdx == exerciseIndex || needsClear) {
+                    val newSets = ex.sets.mapIndexed { sIdx, s ->
+                        if (eIdx == exerciseIndex && sIdx == setIndex) {
+                            s.copy(isTimerActive = willBeActive, timerSecondsRemaining = initialDuration)
+                        } else if (willBeActive && s.isTimerActive) {
+                            s.copy(isTimerActive = false)
+                        } else {
+                            s
+                        }
+                    }
+                    ex.copy(sets = newSets)
+                } else {
+                    ex
+                }
+            }
         }
 
         exerciseTimerJob?.cancel()
@@ -509,28 +525,61 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
 
     // Rest timer
     fun startRestTimer(seconds: Int) {
+        val safeSec = seconds.coerceAtLeast(1)
         val app = getApplication<Application>()
-        ReminderScheduler.scheduleRestTimer(app, seconds.toLong())
-        saveRestEndMillis(System.currentTimeMillis() + seconds * 1000L)
-        launchRestCountdown(seconds)
+        val endMs = System.currentTimeMillis() + safeSec * 1000L
+        restEndMillis = endMs
+        ReminderScheduler.scheduleRestTimer(app, safeSec.toLong())
+        saveRestEndMillis(endMs)
+        launchRestCountdown(endMs)
     }
 
-    private fun launchRestCountdown(seconds: Int) {
-        _restSecondsRemaining.value = seconds
-        _isRestTimerActive.value = true
+    private fun launchRestCountdown(endMs: Long) {
+        restEndMillis = endMs
+        val initialRem = ((endMs - System.currentTimeMillis() + 999L) / 1000L).toInt().coerceAtLeast(0)
+        _restSecondsRemaining.value = initialRem
+        _isRestTimerActive.value = initialRem > 0
 
         restTimerJob?.cancel()
+        if (initialRem <= 0) {
+            saveRestEndMillis(0L)
+            return
+        }
         restTimerJob = viewModelScope.launch {
-            while (_restSecondsRemaining.value > 0 && _isRestTimerActive.value) {
-                delay(1000)
-                _restSecondsRemaining.value -= 1
-                _totalRestSecondsUsed.value += 1
-                if (_restSecondsRemaining.value % 5 == 0) {
-                    saveSessionSnapshot()
+            var prevTrackMs = System.currentTimeMillis()
+            var remainderMs = 0L
+            var savedSecondsCounter = 0L
+            while (_isRestTimerActive.value) {
+                val now = System.currentTimeMillis()
+                val rem = ((restEndMillis - now + 999L) / 1000L).toInt()
+                if (rem <= 0) {
+                    val endClamped = minOf(now, restEndMillis)
+                    val deltaMs = (endClamped - prevTrackMs).coerceAtLeast(0L) + remainderMs
+                    val wholeSec = deltaMs / 1000L
+                    if (wholeSec > 0L) {
+                        _totalRestSecondsUsed.value += wholeSec
+                    }
+                    _restSecondsRemaining.value = 0
+                    break
                 }
+                _restSecondsRemaining.value = rem
+                val deltaMs = (now - prevTrackMs).coerceAtLeast(0L) + remainderMs
+                val wholeSec = deltaMs / 1000L
+                remainderMs = deltaMs % 1000L
+                if (wholeSec > 0L) {
+                    _totalRestSecondsUsed.value += wholeSec
+                    prevTrackMs = now
+                    savedSecondsCounter += wholeSec
+                    if (savedSecondsCounter >= 5L) {
+                        savedSecondsCounter = 0L
+                        saveSessionSnapshot()
+                    }
+                }
+                delay(250L)
             }
             val finishedNaturally = _isRestTimerActive.value && _restSecondsRemaining.value <= 0
             _isRestTimerActive.value = false
+            restEndMillis = 0L
             saveRestEndMillis(0L)
             if (finishedNaturally) {
                 val app = getApplication<Application>()
@@ -541,16 +590,19 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun addRestTime(secondsToAdd: Int = 15) {
-        _restSecondsRemaining.value += secondsToAdd
-        if (_isRestTimerActive.value) {
-            saveRestEndMillis(System.currentTimeMillis() + _restSecondsRemaining.value * 1000L)
-            ReminderScheduler.scheduleRestTimer(getApplication(), _restSecondsRemaining.value.toLong())
-        }
+        if (!_isRestTimerActive.value) return
+        val newEndMs = maxOf(System.currentTimeMillis(), restEndMillis) + secondsToAdd * 1000L
+        restEndMillis = newEndMs
+        val newRem = ((newEndMs - System.currentTimeMillis() + 999L) / 1000L).toInt().coerceAtLeast(1)
+        _restSecondsRemaining.value = newRem
+        saveRestEndMillis(newEndMs)
+        ReminderScheduler.scheduleRestTimer(getApplication(), newRem.toLong())
     }
 
     fun cancelRestTimer() {
         _isRestTimerActive.value = false
         _restSecondsRemaining.value = 0
+        restEndMillis = 0L
         restTimerJob?.cancel()
         saveRestEndMillis(0L)
         ReminderScheduler.cancelReminder(getApplication(), ReminderScheduler.ID_REST_TIMER)
@@ -596,8 +648,10 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             }
 
             withContext(Dispatchers.IO) {
-                workoutDao.insertHistories(summaries)
-                workoutDao.clearSetLogsForDateAndPlan(date, planId)
+                saveMutex.withLock {
+                    workoutDao.insertHistories(summaries)
+                    workoutDao.clearSetLogsForDateAndPlan(date, planId)
+                }
             }
 
             clearSessionPrefs()
@@ -621,7 +675,9 @@ class ActiveWorkoutViewModel(application: Application) : AndroidViewModel(applic
             val date = _workoutDate.value
             val planId = _currentPlanId.value ?: 0L
             withContext(Dispatchers.IO) {
-                workoutDao.clearSetLogsForDateAndPlan(date, planId)
+                saveMutex.withLock {
+                    workoutDao.clearSetLogsForDateAndPlan(date, planId)
+                }
             }
             clearSessionPrefs()
             _isWorkoutActive.value = false

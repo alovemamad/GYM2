@@ -206,9 +206,13 @@ object JalaliCalendar {
     }
 
     fun isJalaliLeapYear(year: Int): Boolean {
-        val a = year - 474
-        val b = (a % 2820 + 2820) % 2820 + 474
-        return (b + 38) * 682 % 2816 < 682
+        fun yearStartDays(y: Int): Int {
+            val jy2 = y - 979
+            val q = Math.floorDiv(jy2, 33)
+            val r = Math.floorMod(jy2, 33)
+            return 365 * jy2 + q * 8 + (r + 3) / 4
+        }
+        return yearStartDays(year + 1) - yearStartDays(year) == 366
     }
 
     /**

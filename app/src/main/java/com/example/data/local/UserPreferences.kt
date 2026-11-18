@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 val Context.dataStore by preferencesDataStore(name = "gym_user_preferences")
@@ -156,11 +157,9 @@ class UserPreferences(private val context: Context) {
         }
 
         val inAppSoundsEnabled = prefs[KEY_IN_APP_SOUNDS_ENABLED] ?: true
-        val restTimerVolume = prefs[KEY_REST_TIMER_VOLUME] ?: 0.8f
-        val timedAlarmVolume = prefs[KEY_TIMED_ALARM_VOLUME] ?: 0.9f
-        val reminderVolume = prefs[KEY_REMINDER_VOLUME] ?: 0.8f
-
-        SoundPrefsCache.save(context, inAppSoundsEnabled, restTimerVolume, timedAlarmVolume, reminderVolume)
+        val restTimerVolume = (prefs[KEY_REST_TIMER_VOLUME] ?: 0.8f).coerceIn(0f, 1f)
+        val timedAlarmVolume = (prefs[KEY_TIMED_ALARM_VOLUME] ?: 0.9f).coerceIn(0f, 1f)
+        val reminderVolume = (prefs[KEY_REMINDER_VOLUME] ?: 0.8f).coerceIn(0f, 1f)
 
         UserSettings(
             userName = prefs[KEY_USER_NAME] ?: "",
@@ -193,13 +192,27 @@ class UserPreferences(private val context: Context) {
         )
     }
 
+    suspend fun syncSoundCache() {
+        val current = userSettingsFlow.first()
+        SoundPrefsCache.save(
+            context,
+            current.inAppSoundsEnabled,
+            current.restTimerVolume,
+            current.timedAlarmVolume,
+            current.reminderVolume
+        )
+    }
+
     suspend fun updateSettings(settings: UserSettings) {
+        val clampedRest = settings.restTimerVolume.coerceIn(0f, 1f)
+        val clampedTimed = settings.timedAlarmVolume.coerceIn(0f, 1f)
+        val clampedReminder = settings.reminderVolume.coerceIn(0f, 1f)
         SoundPrefsCache.save(
             context,
             settings.inAppSoundsEnabled,
-            settings.restTimerVolume,
-            settings.timedAlarmVolume,
-            settings.reminderVolume
+            clampedRest,
+            clampedTimed,
+            clampedReminder
         )
         context.dataStore.edit { prefs ->
             prefs[KEY_USER_NAME] = settings.userName
@@ -225,20 +238,23 @@ class UserPreferences(private val context: Context) {
             prefs[KEY_ONBOARDING_COMPLETED] = settings.onboardingCompleted
             prefs[KEY_LAST_BACKUP] = settings.lastBackupTime
             prefs[KEY_IN_APP_SOUNDS_ENABLED] = settings.inAppSoundsEnabled
-            prefs[KEY_REST_TIMER_VOLUME] = settings.restTimerVolume
-            prefs[KEY_TIMED_ALARM_VOLUME] = settings.timedAlarmVolume
-            prefs[KEY_REMINDER_VOLUME] = settings.reminderVolume
+            prefs[KEY_REST_TIMER_VOLUME] = clampedRest
+            prefs[KEY_TIMED_ALARM_VOLUME] = clampedTimed
+            prefs[KEY_REMINDER_VOLUME] = clampedReminder
             prefs[KEY_GITHUB_REPO] = settings.githubRepo
         }
     }
 
     suspend fun updateSoundSettings(enabled: Boolean, restVol: Float, timedVol: Float, reminderVol: Float) {
-        SoundPrefsCache.save(context, enabled, restVol, timedVol, reminderVol)
+        val clampedRest = restVol.coerceIn(0f, 1f)
+        val clampedTimed = timedVol.coerceIn(0f, 1f)
+        val clampedReminder = reminderVol.coerceIn(0f, 1f)
+        SoundPrefsCache.save(context, enabled, clampedRest, clampedTimed, clampedReminder)
         context.dataStore.edit { prefs ->
             prefs[KEY_IN_APP_SOUNDS_ENABLED] = enabled
-            prefs[KEY_REST_TIMER_VOLUME] = restVol
-            prefs[KEY_TIMED_ALARM_VOLUME] = timedVol
-            prefs[KEY_REMINDER_VOLUME] = reminderVol
+            prefs[KEY_REST_TIMER_VOLUME] = clampedRest
+            prefs[KEY_TIMED_ALARM_VOLUME] = clampedTimed
+            prefs[KEY_REMINDER_VOLUME] = clampedReminder
         }
     }
 

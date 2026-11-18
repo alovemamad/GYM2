@@ -75,11 +75,13 @@ object ReminderScheduler {
     }
 
     fun computeNextDailyTriggerMillis(timeStr: String, nowMillis: Long = System.currentTimeMillis()): Long? {
-        val parts = timeStr.trim().split(":")
+        val normalized = PersianNumberHelper.toEnglishDigits(timeStr.trim())
+        val parts = normalized.split(":")
         if (parts.size != 2) return null
 
-        val hour = parts[0].toIntOrNull()?.coerceIn(0, 23) ?: 18
-        val minute = parts[1].toIntOrNull()?.coerceIn(0, 59) ?: 0
+        val hour = parts[0].trim().toIntOrNull() ?: return null
+        val minute = parts[1].trim().toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
 
         val calendar = Calendar.getInstance().apply {
             timeInMillis = nowMillis
@@ -133,18 +135,22 @@ object ReminderScheduler {
     }
 
     fun scheduleSupplementItemReminder(context: Context, supplementId: Long, timeStr: String, name: String, dosage: String) {
-        val reminderId = 2000 + (supplementId % 1000).toInt()
+        val reminderId = (2000L + (supplementId.coerceAtLeast(0L) % 1_000_000L)).toInt()
         val title = "یادآور مصرف مکمل: $name"
         val message = "زمان مصرف دوز $dosage از مکمل $name فرا رسیده است."
         scheduleDailyReminder(context, reminderId, timeStr, title, message, NotificationHelper.CHANNEL_SUPPLEMENT)
     }
 
     fun cancelSupplementItemReminder(context: Context, supplementId: Long) {
-        val reminderId = 2000 + (supplementId % 1000).toInt()
+        val reminderId = (2000L + (supplementId.coerceAtLeast(0L) % 1_000_000L)).toInt()
         cancelReminder(context, reminderId)
     }
 
     fun scheduleRestTimer(context: Context, durationSeconds: Long) {
+        if (durationSeconds <= 0L) {
+            cancelReminder(context, ID_REST_TIMER)
+            return
+        }
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val triggerTime = System.currentTimeMillis() + (durationSeconds * 1000L)
 

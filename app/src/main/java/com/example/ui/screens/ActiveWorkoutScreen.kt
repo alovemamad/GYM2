@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +50,7 @@ fun ActiveWorkoutScreen(
     var showFinishConfirmDialog by remember { mutableStateOf(false) }
     var showCancelConfirmDialog by remember { mutableStateOf(false) }
     var showWorkoutSettingsDialog by remember { mutableStateOf(false) }
-    var selectedDefaultRest by remember { mutableIntStateOf(60) }
+    var selectedDefaultRest by rememberSaveable { mutableIntStateOf(60) }
 
     // جلوگیری از خروج ناخواسته با زدن دکمه برگشت گوشی یا بستن
     BackHandler {
@@ -401,12 +402,19 @@ fun ActiveWorkoutScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         // متن محلی تا تایپ اعشار (مثل «۲۲.») قطع نشود
-                                        var weightText by remember(exIndex, setIndex, setLog.weight) {
+                                        var weightText by remember(exIndex, setIndex, setLog.setNumber) {
                                             mutableStateOf(
                                                 if (setLog.weight == 0.0) ""
                                                 else if (setLog.weight % 1.0 == 0.0) setLog.weight.toLong().toString()
                                                 else setLog.weight.toString()
                                             )
+                                        }
+                                        LaunchedEffect(setLog.weight) {
+                                            if ((weightText.toDoubleOrNull() ?: 0.0) != setLog.weight) {
+                                                weightText = if (setLog.weight == 0.0) ""
+                                                else if (setLog.weight % 1.0 == 0.0) setLog.weight.toLong().toString()
+                                                else setLog.weight.toString()
+                                            }
                                         }
                                         BasicTextField(
                                             value = weightText,
@@ -533,13 +541,14 @@ fun ActiveWorkoutScreen(
 
     // Workout Settings & Rest Duration Dialog
     if (showWorkoutSettingsDialog) {
+        var restDraft by remember(showWorkoutSettingsDialog) { mutableIntStateOf(selectedDefaultRest) }
         LiquidAlertDialog(
             onDismissRequest = { showWorkoutSettingsDialog = false },
             title = "تنظیمات جلسه تمرین",
             message = "مدت زمان پیش‌فرض استراحت بین ست‌ها:",
             confirmText = "تأیید و ذخیره",
             dismissText = "بستن",
-            onConfirm = {},
+            onConfirm = { selectedDefaultRest = restDraft },
             content = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -575,12 +584,12 @@ fun ActiveWorkoutScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf(30, 45, 60, 90, 120).forEach { sec ->
-                            val isSel = selectedDefaultRest == sec
+                            val isSel = restDraft == sec
                             Surface(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(44.dp)
-                                    .liquidTapEffect { selectedDefaultRest = sec },
+                                    .liquidTapEffect { restDraft = sec },
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isSel) LiquidTheme.accentColor else LiquidTheme.surfaceElevated
                             ) {
@@ -669,7 +678,7 @@ private fun WorkoutElapsedStatCard(
     val elapsedSeconds by elapsedSecondsFlow.collectAsStateWithLifecycle()
     val minutes = elapsedSeconds / 60
     val seconds = elapsedSeconds % 60
-    val timeStr = "${String.format("%02d", minutes)}:${String.format("%02d", seconds)}"
+    val timeStr = "${String.format(java.util.Locale.US, "%02d", minutes)}:${String.format(java.util.Locale.US, "%02d", seconds)}"
 
     Box(
         modifier = modifier
