@@ -42,6 +42,24 @@ class GymRepository(
         userPreferences.setAppearanceAndPalette(appearanceMode, accentPalette)
     }
 
+    suspend fun updateGlassSettings(
+        material: String,
+        wallpaper: String,
+        glassLists: Boolean,
+        shrinkTabBar: Boolean,
+        motionHighlights: Boolean,
+        reduceTransparency: Boolean
+    ) {
+        userPreferences.updateGlassSettings(
+            material = material,
+            wallpaper = wallpaper,
+            glassLists = glassLists,
+            shrinkTabBar = shrinkTabBar,
+            motionHighlights = motionHighlights,
+            reduceTransparency = reduceTransparency
+        )
+    }
+
     suspend fun setWaterGoal(goalMl: Int) {
         userPreferences.setWaterGoal(goalMl)
         WaterAppWidgetProvider.updateAllWidgets(context)

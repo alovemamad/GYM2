@@ -145,6 +145,26 @@ class GymViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateGlassSettings(
+        material: String = userSettings.value.glassMaterial,
+        wallpaper: String = userSettings.value.glassWallpaper,
+        glassLists: Boolean = userSettings.value.glassLists,
+        shrinkTabBar: Boolean = userSettings.value.shrinkTabBar,
+        motionHighlights: Boolean = userSettings.value.motionHighlights,
+        reduceTransparency: Boolean = userSettings.value.reduceTransparency
+    ) {
+        viewModelScope.launch {
+            repository.updateGlassSettings(
+                material = material,
+                wallpaper = wallpaper,
+                glassLists = glassLists,
+                shrinkTabBar = shrinkTabBar,
+                motionHighlights = motionHighlights,
+                reduceTransparency = reduceTransparency
+            )
+        }
+    }
+
     fun setWaterGoal(goalMl: Int) {
         viewModelScope.launch {
             repository.setWaterGoal(goalMl)

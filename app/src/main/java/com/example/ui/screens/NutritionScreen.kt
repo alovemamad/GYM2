@@ -91,7 +91,7 @@ fun NutritionScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = com.example.ui.components.LocalLiquidBottomClearance.current + 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 1. Inline Liquid Top Bar

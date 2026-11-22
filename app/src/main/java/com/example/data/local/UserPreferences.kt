@@ -82,8 +82,14 @@ data class UserSettings(
     val waterGoalMl: Int = 2500,
     val weightUnit: String = "kg", // "kg" or "lb"
     val appearanceMode: String = "SYSTEM", // "SYSTEM", "LIGHT", "DARK"
-    val accentPalette: String = "SPORT_RED", // "SPORT_RED", "GOLD_CARBON", "OCEAN", "EMERALD", "SUNSET", "VIOLET", "ROSE", "CYBER"
+    val accentPalette: String = "SPORT_RED", // "SPORT_RED", "GOLD_CARBON", "OCEAN", "EMERALD", "BRONZE_MEDAL", "VIOLET", "ROSE", "PLATINUM_STEEL"
     val theme: String = "DARK", // Kept for backward compatibility
+    val glassMaterial: String = "CLEAR", // "CLEAR", "TINTED"
+    val glassWallpaper: String = "BOTANICAL", // "BOTANICAL", "MIST", "LAGOON", "DUSK", "GRAPHITE", "PLAIN"
+    val glassLists: Boolean = true,
+    val shrinkTabBar: Boolean = true,
+    val motionHighlights: Boolean = false,
+    val reduceTransparency: Boolean = false,
     val workoutReminderEnabled: Boolean = false,
     val workoutReminderTime: String = "18:00",
     val waterReminderEnabled: Boolean = false,
@@ -128,6 +134,12 @@ class UserPreferences(private val context: Context) {
     private val KEY_TIMED_ALARM_VOLUME = floatPreferencesKey("timed_alarm_volume")
     private val KEY_REMINDER_VOLUME = floatPreferencesKey("reminder_volume")
     private val KEY_GITHUB_REPO = stringPreferencesKey("github_repo")
+    private val KEY_GLASS_MATERIAL = stringPreferencesKey("glass_material")
+    private val KEY_GLASS_WALLPAPER = stringPreferencesKey("glass_wallpaper")
+    private val KEY_GLASS_LISTS = booleanPreferencesKey("glass_lists")
+    private val KEY_SHRINK_TAB_BAR = booleanPreferencesKey("shrink_tab_bar")
+    private val KEY_MOTION_HIGHLIGHTS = booleanPreferencesKey("motion_highlights")
+    private val KEY_REDUCE_TRANSPARENCY = booleanPreferencesKey("reduce_transparency")
 
     val userSettingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
         val rawAge = prefs[KEY_AGE]
@@ -139,7 +151,7 @@ class UserPreferences(private val context: Context) {
         val savedPalette = prefs[KEY_ACCENT_PALETTE]
         val oldTheme = prefs[KEY_THEME] ?: "DARK"
 
-        val (migratedAppearance, migratedPalette) = when {
+        val (migratedAppearance, rawMigratedPalette) = when {
             savedAppearance != null && savedPalette != null -> {
                 savedAppearance to savedPalette
             }
@@ -150,10 +162,15 @@ class UserPreferences(private val context: Context) {
             oldTheme == "PINK" -> "SYSTEM" to "ROSE"
             oldTheme == "OCEAN" -> "SYSTEM" to "OCEAN"
             oldTheme == "EMERALD" -> "SYSTEM" to "EMERALD"
-            oldTheme == "SUNSET" -> "SYSTEM" to "SUNSET"
+            oldTheme == "SUNSET" -> "SYSTEM" to "BRONZE_MEDAL"
             oldTheme == "PURPLE" -> "SYSTEM" to "VIOLET"
-            oldTheme == "CYBER" -> "SYSTEM" to "CYBER"
+            oldTheme == "CYBER" -> "SYSTEM" to "PLATINUM_STEEL"
             else -> "SYSTEM" to "SPORT_RED"
+        }
+        val migratedPalette = when (rawMigratedPalette.uppercase()) {
+            "SUNSET" -> "BRONZE_MEDAL"
+            "CYBER" -> "PLATINUM_STEEL"
+            else -> rawMigratedPalette
         }
 
         val inAppSoundsEnabled = prefs[KEY_IN_APP_SOUNDS_ENABLED] ?: true
@@ -176,6 +193,12 @@ class UserPreferences(private val context: Context) {
             appearanceMode = migratedAppearance,
             accentPalette = migratedPalette,
             theme = oldTheme,
+            glassMaterial = prefs[KEY_GLASS_MATERIAL] ?: "CLEAR",
+            glassWallpaper = prefs[KEY_GLASS_WALLPAPER] ?: "BOTANICAL",
+            glassLists = prefs[KEY_GLASS_LISTS] ?: true,
+            shrinkTabBar = prefs[KEY_SHRINK_TAB_BAR] ?: true,
+            motionHighlights = prefs[KEY_MOTION_HIGHLIGHTS] ?: false,
+            reduceTransparency = prefs[KEY_REDUCE_TRANSPARENCY] ?: false,
             workoutReminderEnabled = prefs[KEY_WORKOUT_REMINDER_ENABLED] ?: false,
             workoutReminderTime = prefs[KEY_WORKOUT_REMINDER_TIME] ?: "18:00",
             waterReminderEnabled = prefs[KEY_WATER_REMINDER_ENABLED] ?: false,
@@ -229,6 +252,12 @@ class UserPreferences(private val context: Context) {
             prefs[KEY_THEME] = settings.theme
             prefs[KEY_APPEARANCE_MODE] = settings.appearanceMode
             prefs[KEY_ACCENT_PALETTE] = settings.accentPalette
+            prefs[KEY_GLASS_MATERIAL] = settings.glassMaterial
+            prefs[KEY_GLASS_WALLPAPER] = settings.glassWallpaper
+            prefs[KEY_GLASS_LISTS] = settings.glassLists
+            prefs[KEY_SHRINK_TAB_BAR] = settings.shrinkTabBar
+            prefs[KEY_MOTION_HIGHLIGHTS] = settings.motionHighlights
+            prefs[KEY_REDUCE_TRANSPARENCY] = settings.reduceTransparency
             prefs[KEY_WORKOUT_REMINDER_ENABLED] = settings.workoutReminderEnabled
             prefs[KEY_WORKOUT_REMINDER_TIME] = settings.workoutReminderTime
             prefs[KEY_WATER_REMINDER_ENABLED] = settings.waterReminderEnabled
@@ -271,6 +300,24 @@ class UserPreferences(private val context: Context) {
             prefs[KEY_APPEARANCE_MODE] = appearanceMode
             prefs[KEY_ACCENT_PALETTE] = accentPalette
             prefs[KEY_THEME] = if (appearanceMode == "LIGHT") "LIGHT" else accentPalette
+        }
+    }
+
+    suspend fun updateGlassSettings(
+        material: String,
+        wallpaper: String,
+        glassLists: Boolean,
+        shrinkTabBar: Boolean,
+        motionHighlights: Boolean,
+        reduceTransparency: Boolean
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_GLASS_MATERIAL] = material
+            prefs[KEY_GLASS_WALLPAPER] = wallpaper
+            prefs[KEY_GLASS_LISTS] = glassLists
+            prefs[KEY_SHRINK_TAB_BAR] = shrinkTabBar
+            prefs[KEY_MOTION_HIGHLIGHTS] = motionHighlights
+            prefs[KEY_REDUCE_TRANSPARENCY] = reduceTransparency
         }
     }
 

@@ -254,4 +254,52 @@ class ExampleUnitTest {
         assertEquals(30, JalaliCalendar.getDaysInJalaliMonth(1403, 12))
         assertEquals(29, JalaliCalendar.getDaysInJalaliMonth(1404, 12))
     }
+
+    @Test
+    fun testBronzeAndPlatinumPalettesAndLegacyMigration() {
+        val ids = LiquidPalettes.all.map { it.id }
+        assertEquals(8, ids.size)
+        assertTrue(ids.contains("BRONZE_MEDAL"))
+        assertTrue(ids.contains("PLATINUM_STEEL"))
+        assertFalse(ids.contains("SUNSET"))
+        assertFalse(ids.contains("CYBER"))
+
+        assertEquals("برنز قهرمانی", LiquidPalettes.BRONZE_MEDAL.persianName)
+        assertEquals("تیتانیوم نقره‌ای", LiquidPalettes.PLATINUM_STEEL.persianName)
+
+        // Legacy IDs migrate seamlessly to the two new fitness palettes
+        assertEquals(LiquidPalettes.BRONZE_MEDAL, LiquidPalettes.fromId("SUNSET"))
+        assertEquals(LiquidPalettes.PLATINUM_STEEL, LiquidPalettes.fromId("CYBER"))
+    }
+
+    @Test
+    fun testGlassPaletteContrastOnLightAndDarkWallpapers() {
+        LiquidPalettes.all.forEach { palette ->
+            com.example.ui.glass.GlassWallpaper.entries.forEach { wallpaper ->
+                com.example.ui.glass.GlassMaterial.entries.forEach { material ->
+                    listOf(false, true).forEach { isDark ->
+                        val colors = com.example.ui.glass.GlassPalette.of(
+                            dark = isDark,
+                            palette = palette,
+                            material = material,
+                            wallpaper = wallpaper,
+                            glassLists = true,
+                            reduceTransparency = false
+                        )
+                        val cardBg = if (colors.darkBackdrop) Color(0xFF151920) else Color(0xFFF6F6FA)
+                        val labelContrast = wcagContrastRatio(colors.label, cardBg)
+                        val tintContrast = wcagContrastRatio(colors.tint, cardBg)
+                        assertTrue(
+                            "${palette.id}/${wallpaper.id}/${material.id}/dark=$isDark label contrast $labelContrast",
+                            labelContrast >= 7.0f
+                        )
+                        assertTrue(
+                            "${palette.id}/${wallpaper.id}/${material.id}/dark=$isDark tint contrast $tintContrast",
+                            tintContrast >= 3.0f
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

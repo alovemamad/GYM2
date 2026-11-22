@@ -82,7 +82,7 @@ fun DashboardScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("dashboard_screen"),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = com.example.ui.components.LocalLiquidBottomClearance.current + 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. Inline Liquid Top Bar with Profile Button & Logo

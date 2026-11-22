@@ -99,13 +99,13 @@ object LiquidPalettes {
         gradientEnd = Color(0xFF03281A)
     )
 
-    val SUNSET = LiquidPalette(
-        id = "SUNSET",
-        persianName = "غروب آتشین",
-        dayAccent = Color(0xFFFF9654),
-        nightAccent = Color(0xFFFF7A33),
-        gradientStart = Color(0xFFFF8A2B),
-        gradientEnd = Color(0xFF8A1FA8)
+    val BRONZE_MEDAL = LiquidPalette(
+        id = "BRONZE_MEDAL",
+        persianName = "برنز قهرمانی",
+        dayAccent = Color(0xFFFFAA5C),
+        nightAccent = Color(0xFFE88635),
+        gradientStart = Color(0xFFC8641C),
+        gradientEnd = Color(0xFF1C0E04)
     )
 
     val VIOLET = LiquidPalette(
@@ -126,13 +126,13 @@ object LiquidPalettes {
         gradientEnd = Color(0xFF3A0A2A)
     )
 
-    val CYBER = LiquidPalette(
-        id = "CYBER",
-        persianName = "سایبرپانک",
-        dayAccent = Color(0xFF47EEFF),
-        nightAccent = Color(0xFF22E6FF),
-        gradientStart = Color(0xFF00E5FF),
-        gradientEnd = Color(0xFFFF2BD6)
+    val PLATINUM_STEEL = LiquidPalette(
+        id = "PLATINUM_STEEL",
+        persianName = "تیتانیوم نقره‌ای",
+        dayAccent = Color(0xFFC4D0E0),
+        nightAccent = Color(0xFF9FB0C7),
+        gradientStart = Color(0xFF5D6F85),
+        gradientEnd = Color(0xFF10151D)
     )
 
     val all = listOf(
@@ -140,10 +140,10 @@ object LiquidPalettes {
         GOLD_CARBON,
         OCEAN,
         EMERALD,
-        SUNSET,
+        BRONZE_MEDAL,
         VIOLET,
         ROSE,
-        CYBER
+        PLATINUM_STEEL
     )
 
     fun fromId(id: String): LiquidPalette {
@@ -155,6 +155,8 @@ object LiquidPalettes {
                 "SYSTEM" -> SPORT_RED
                 "PINK" -> ROSE
                 "PURPLE" -> VIOLET
+                "SUNSET" -> BRONZE_MEDAL
+                "CYBER" -> PLATINUM_STEEL
                 else -> SPORT_RED
             }
     }

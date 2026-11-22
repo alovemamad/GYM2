@@ -67,6 +67,12 @@ object BackupHelper {
             put("appearanceMode", settings.appearanceMode)
             put("accentPalette", settings.accentPalette)
             put("theme", settings.theme)
+            put("glassMaterial", settings.glassMaterial)
+            put("glassWallpaper", settings.glassWallpaper)
+            put("glassLists", settings.glassLists)
+            put("shrinkTabBar", settings.shrinkTabBar)
+            put("motionHighlights", settings.motionHighlights)
+            put("reduceTransparency", settings.reduceTransparency)
             put("workoutReminderEnabled", settings.workoutReminderEnabled)
             put("workoutReminderTime", settings.workoutReminderTime)
             put("waterReminderEnabled", settings.waterReminderEnabled)
@@ -242,8 +248,18 @@ object BackupHelper {
                     waterGoalMl = setObj.optInt("waterGoalMl", 2500),
                     weightUnit = setObj.optString("weightUnit", "kg"),
                     appearanceMode = setObj.optString("appearanceMode", "SYSTEM"),
-                    accentPalette = setObj.optString("accentPalette", "SPORT_RED"),
+                    accentPalette = when (val rawPal = setObj.optString("accentPalette", "SPORT_RED").uppercase()) {
+                        "SUNSET" -> "BRONZE_MEDAL"
+                        "CYBER" -> "PLATINUM_STEEL"
+                        else -> rawPal
+                    },
                     theme = setObj.optString("theme", "DARK"),
+                    glassMaterial = setObj.optString("glassMaterial", "CLEAR"),
+                    glassWallpaper = setObj.optString("glassWallpaper", "BOTANICAL"),
+                    glassLists = setObj.optBoolean("glassLists", true),
+                    shrinkTabBar = setObj.optBoolean("shrinkTabBar", true),
+                    motionHighlights = setObj.optBoolean("motionHighlights", false),
+                    reduceTransparency = setObj.optBoolean("reduceTransparency", false),
                     workoutReminderEnabled = setObj.optBoolean("workoutReminderEnabled", false),
                     workoutReminderTime = setObj.optString("workoutReminderTime", "18:00"),
                     waterReminderEnabled = setObj.optBoolean("waterReminderEnabled", false),

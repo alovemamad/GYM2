@@ -13,10 +13,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,13 +34,27 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -47,6 +65,7 @@ import com.example.R
 import com.example.data.local.SoundPrefsCache
 import com.example.data.local.UserSettings
 import com.example.ui.components.*
+import com.example.ui.glass.*
 import com.example.ui.theme.*
 import com.example.util.AlertType
 import com.example.util.AppUpdateHelper
@@ -80,7 +99,15 @@ fun ProfileSettingsScreen(
     onOpenOnboarding: () -> Unit,
     onUpdateProfilePhoto: (String) -> Unit = {},
     onUpdateSoundSettings: (Boolean, Float, Float, Float) -> Unit = { _, _, _, _ -> },
-    onSetGithubRepo: (String) -> Unit = {}
+    onSetGithubRepo: (String) -> Unit = {},
+    onUpdateGlassSettings: (
+        material: String,
+        wallpaper: String,
+        glassLists: Boolean,
+        shrinkTabBar: Boolean,
+        motionHighlights: Boolean,
+        reduceTransparency: Boolean
+    ) -> Unit = { _, _, _, _, _, _ -> }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -231,10 +258,32 @@ fun ProfileSettingsScreen(
     when (currentSubScreen) {
         "appearance" -> {
             // ==========================================
-            // زیرصفحه تم و ظاهر
+            // زیرصفحه تم و ظاهر Liquid Glass
             // ==========================================
+            val currentMaterial = GlassMaterial.fromId(userSettings.glassMaterial)
+            val currentWallpaper = GlassWallpaper.fromId(userSettings.glassWallpaper)
+            val effectiveDark = LiquidTheme.isDark
+
+            fun saveGlass(
+                material: GlassMaterial = currentMaterial,
+                wallpaper: GlassWallpaper = currentWallpaper,
+                glassLists: Boolean = userSettings.glassLists,
+                shrinkTabBar: Boolean = userSettings.shrinkTabBar,
+                motionHighlights: Boolean = userSettings.motionHighlights,
+                reduceTransparency: Boolean = userSettings.reduceTransparency
+            ) {
+                onUpdateGlassSettings(
+                    material.id,
+                    wallpaper.id,
+                    glassLists,
+                    shrinkTabBar,
+                    motionHighlights,
+                    reduceTransparency
+                )
+            }
+
             Scaffold(
-                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                containerColor = Color.Transparent,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
                     LiquidTopBar(
@@ -252,41 +301,146 @@ fun ProfileSettingsScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .padding(padding)
+                        .testTag("appearance_subscreen"),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 12.dp,
+                        bottom = LocalLiquidBottomClearance.current + 24.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
-                    // Axis 1: Day / Night mode
+                    // 1. Appearance Wireframe Preview + Auto System Switch
                     item {
-                        LiquidSectionHeader(title = "حالت نمایش سیستم")
-                        SolidGroupedCard {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                val modes = listOf(
-                                    "SYSTEM" to "سیستم",
-                                    "LIGHT" to "روشن",
-                                    "DARK" to "تاریک"
-                                )
-                                val selectedIndex = when (userSettings.appearanceMode) {
-                                    "LIGHT" -> 1
-                                    "DARK" -> 2
-                                    else -> 0
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LiquidSectionHeader(title = "حالت نمایش")
+                            SolidGroupedCard {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .selectableGroup()
+                                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(44.dp, Alignment.CenterHorizontally)
+                                ) {
+                                    LookPreviewCard(
+                                        label = "روشن",
+                                        selected = !effectiveDark,
+                                        darkPreview = false,
+                                        onClick = {
+                                            onSetAppearanceAndPalette("LIGHT", userSettings.accentPalette)
+                                        },
+                                        modifier = Modifier.testTag("look_choice_light")
+                                    )
+                                    LookPreviewCard(
+                                        label = "تاریک",
+                                        selected = effectiveDark,
+                                        darkPreview = true,
+                                        onClick = {
+                                            onSetAppearanceAndPalette("DARK", userSettings.accentPalette)
+                                        },
+                                        modifier = Modifier.testTag("look_choice_dark")
+                                    )
                                 }
-                                LiquidSegmentedControl(
-                                    items = modes.map { it.second },
-                                    selectedIndex = selectedIndex,
-                                    onSelectIndex = { idx ->
-                                        val newMode = modes[idx].first
-                                        onSetAppearanceAndPalette(newMode, userSettings.accentPalette)
-                                    }
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.6.dp,
+                                    color = LiquidTheme.dividerColor
+                                )
+                                GroupedToggleRow(
+                                    title = "تنظیم خودکار بر اساس سیستم",
+                                    subtitle = "هماهنگ با تم روز و شب گوشی",
+                                    checked = userSettings.appearanceMode.equals("SYSTEM", ignoreCase = true),
+                                    onCheckedChange = { auto ->
+                                        val nextMode = if (auto) "SYSTEM" else if (effectiveDark) "DARK" else "LIGHT"
+                                        onSetAppearanceAndPalette(nextMode, userSettings.accentPalette)
+                                    },
+                                    modifier = Modifier.testTag("switch_appearance_system")
                                 )
                             }
                         }
                     }
 
-                    // Axis 2: 8 Accent Palettes
+                    // 2. Glass Material (Clear vs Tinted)
                     item {
-                        LiquidSectionHeader(title = "پالت‌های رنگی Liquid Glass")
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LiquidSectionHeader(title = "جنس شیشه (Liquid Glass)")
+                            SolidGroupedCard {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .selectableGroup()
+                                        .padding(horizontal = 12.dp, vertical = 18.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterHorizontally)
+                                ) {
+                                    MaterialPreviewCard(
+                                        kind = GlassMaterial.CLEAR,
+                                        label = "شفاف و بلوری",
+                                        selected = currentMaterial == GlassMaterial.CLEAR,
+                                        onClick = { saveGlass(material = GlassMaterial.CLEAR) },
+                                        modifier = Modifier.testTag("material_choice_clear")
+                                    )
+                                    MaterialPreviewCard(
+                                        kind = GlassMaterial.TINTED,
+                                        label = "مات و خوانا",
+                                        selected = currentMaterial == GlassMaterial.TINTED,
+                                        onClick = { saveGlass(material = GlassMaterial.TINTED) },
+                                        modifier = Modifier.testTag("material_choice_tinted")
+                                    )
+                                }
+                            }
+                            GlassFooterNote(
+                                "حالت شفاف جلوه شکست نور و عمق بیشتری دارد؛ حالت مات کنتراست و خوانایی متن‌ها را افزایش می‌دهد."
+                            )
+                        }
+                    }
+
+                    // 3. Wallpaper Presets
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LiquidSectionHeader(title = "پس‌زمینه شیشه‌ای")
+                            SolidGroupedCard {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .selectableGroup()
+                                        .padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    val wallpapers = GlassWallpaper.entries
+                                    for (i in wallpapers.indices step 3) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            for (j in 0 until 3) {
+                                                val wp = wallpapers.getOrNull(i + j)
+                                                if (wp != null) {
+                                                    WallpaperPreviewCard(
+                                                        wallpaper = wp,
+                                                        isDark = effectiveDark,
+                                                        palette = LiquidTheme.palette,
+                                                        selected = currentWallpaper == wp,
+                                                        onClick = { saveGlass(wallpaper = wp) },
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .testTag("wallpaper_choice_${wp.id.lowercase()}")
+                                                    )
+                                                } else {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 4. 8 Accent Palettes (now with برنز قهرمانی & تیتانیوم نقره‌ای)
+                    item {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            LiquidSectionHeader(title = "پالت‌های رنگی Liquid Glass")
                             val palettes = LiquidPalettes.all
                             for (i in palettes.indices step 2) {
                                 Row(
@@ -323,6 +477,63 @@ fun ProfileSettingsScreen(
                             }
                         }
                     }
+
+                    // 5. Glass Effects & Motion Toggles
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LiquidSectionHeader(title = "جلوه‌ها و رفتار شیشه")
+                            SolidGroupedCard {
+                                GroupedToggleRow(
+                                    title = "لیست‌ها و کارت‌های شیشه‌ای",
+                                    subtitle = "نمایش کارت‌ها با بافت شیشه‌ای نیمه‌شفاف",
+                                    checked = userSettings.glassLists,
+                                    enabled = !userSettings.reduceTransparency,
+                                    onCheckedChange = { saveGlass(glassLists = it) },
+                                    modifier = Modifier.testTag("switch_glass_lists")
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.6.dp,
+                                    color = LiquidTheme.dividerColor
+                                )
+                                GroupedToggleRow(
+                                    title = "جمع‌شدن نوار پایین هنگام اسکرول",
+                                    subtitle = "تبدیل نوار پایین به کپسول کوچک برای فضای بیشتر",
+                                    checked = userSettings.shrinkTabBar,
+                                    onCheckedChange = { saveGlass(shrinkTabBar = it) },
+                                    modifier = Modifier.testTag("switch_shrink_tab_bar")
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.6.dp,
+                                    color = LiquidTheme.dividerColor
+                                )
+                                GroupedToggleRow(
+                                    title = "بازتاب نور با چرخش گوشی",
+                                    subtitle = "تغییر زاویه درخشش لبه‌های شیشه با سنسور حرکت",
+                                    checked = userSettings.motionHighlights,
+                                    enabled = !userSettings.reduceTransparency,
+                                    onCheckedChange = { saveGlass(motionHighlights = it) },
+                                    modifier = Modifier.testTag("switch_motion_highlights")
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                    thickness = 0.6.dp,
+                                    color = LiquidTheme.dividerColor
+                                )
+                                GroupedToggleRow(
+                                    title = "کاهش شفافیت (خوانایی بیشتر)",
+                                    subtitle = "جایگزینی سطوح مات و حذف محوشدگی پس‌زمینه",
+                                    checked = userSettings.reduceTransparency,
+                                    onCheckedChange = { saveGlass(reduceTransparency = it) },
+                                    modifier = Modifier.testTag("switch_reduce_transparency")
+                                )
+                            }
+                            GlassFooterNote(
+                                "محوشدگی زنده در اندروید ۱۲ به بالا و شکست نور نوری (عدسی Liquid Glass) در اندروید ۱۳ به بالا فعال می‌شود."
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -351,7 +562,12 @@ fun ProfileSettingsScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 12.dp,
+                        bottom = LocalLiquidBottomClearance.current + 20.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Permission Banner if not granted
@@ -772,7 +988,7 @@ fun ProfileSettingsScreen(
                         .fillMaxSize()
                         .padding(padding)
                         .testTag("profile_screen"),
-                    contentPadding = PaddingValues(bottom = 24.dp),
+                    contentPadding = PaddingValues(bottom = LocalLiquidBottomClearance.current + 24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Profile Header Card
@@ -869,7 +1085,7 @@ fun ProfileSettingsScreen(
                                 SolidGroupedCard {
                                     GroupedRow(
                                         title = "ظاهر و پالت‌های رنگی",
-                                        subtitle = "حالت سیستم و ۸ پالت اختصاصی Liquid Glass",
+                                        subtitle = "حالت نمایش، جنس شیشه، پس‌زمینه و پالت رنگی",
                                         icon = Icons.Filled.Palette,
                                         iconTint = LiquidTheme.iconPurple,
                                         showDivider = true,
@@ -1507,7 +1723,7 @@ private fun AppUpdateDialog(
                     .width(330.dp)
                     .clickable(enabled = false) {}
                     .liquidGlass(
-                        hazeState = null,
+                        useBackdrop = false,
                         shape = RoundedCornerShape(26.dp),
                         tintAlpha = if (LiquidTheme.isDark) 0.90f else 0.95f,
                         elevation = 16.dp
@@ -1798,24 +2014,357 @@ private fun AppUpdateDialog(
 }
 
 @Composable
+private fun PreviewChoiceBox(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    preview: @Composable () -> Unit
+) {
+    val c = Glass.colors
+    Column(
+        modifier = modifier
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            .selectable(
+                selected = selected,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.RadioButton,
+                onClick = onClick
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        preview()
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = c.label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        GlassRadioDot(selected = selected)
+    }
+}
+
+@Composable
+private fun GlassRadioDot(selected: Boolean) {
+    val c = Glass.colors
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .clip(CircleShape)
+            .background(if (selected) c.tint else Color.Transparent)
+            .border(1.5.dp, if (selected) c.tint else c.separator, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = onColorFor(c.tint),
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+private fun Modifier.previewChoiceRing(selected: Boolean, c: GlassColors, shape: Shape): Modifier =
+    border(if (selected) 2.2.dp else 0.6.dp, if (selected) c.tint else c.separator, shape)
+
+@Composable
+private fun LookPreviewCard(
+    label: String,
+    selected: Boolean,
+    darkPreview: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val c = Glass.colors
+    val shape = RoundedCornerShape(14.dp)
+    PreviewChoiceBox(label = label, selected = selected, onClick = onClick, modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .size(width = 72.dp, height = 132.dp)
+                .previewChoiceRing(selected, c, shape)
+                .padding(if (selected) 2.2.dp else 0.6.dp)
+                .clip(shape)
+                .background(if (darkPreview) Color(0xFF0A0C10) else Color(0xFFF2F2F7))
+        ) {
+            val bar = if (darkPreview) Color.White.copy(alpha = 0.85f) else Color.Black.copy(alpha = 0.75f)
+            val card = if (darkPreview) Color(0xFF1C1C1E) else Color.White
+            val glass = if (darkPreview) Color(0xCC505054) else Color(0xE6FFFFFF)
+            PreviewMockBit(0.12f, 0.10f, 0.46f, 0.05f, bar, 3.dp)
+            PreviewMockBit(0.09f, 0.24f, 0.82f, 0.25f, card, 8.dp)
+            PreviewMockBit(0.09f, 0.54f, 0.82f, 0.17f, card, 8.dp)
+            PreviewMockBit(0.09f, 0.84f, 0.62f, 0.10f, glass, 10.dp)
+            PreviewMockBit(0.74f, 0.84f, 0.17f, 0.10f, c.tint.copy(alpha = 0.85f), 10.dp)
+        }
+    }
+}
+
+@Composable
+private fun BoxScope.PreviewMockBit(
+    x: Float,
+    y: Float,
+    w: Float,
+    h: Float,
+    color: Color,
+    radius: Dp
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .drawBehind {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(size.width * x, size.height * y),
+                    size = Size(size.width * w, size.height * h),
+                    cornerRadius = CornerRadius(radius.toPx())
+                )
+            }
+    )
+}
+
+private val MaterialPreviewGradient = Brush.linearGradient(
+    0f to Color(0xFFFF8D28),
+    0.35f to Color(0xFFFF2D55),
+    0.68f to Color(0xFF6155F5),
+    1f to Color(0xFF00C3D0)
+)
+
+@Composable
+private fun MaterialPreviewCard(
+    kind: GlassMaterial,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val c = Glass.colors
+    val shape = RoundedCornerShape(16.dp)
+    val tinted = kind == GlassMaterial.TINTED
+    PreviewChoiceBox(label = label, selected = selected, onClick = onClick, modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .size(width = 132.dp, height = 96.dp)
+                .previewChoiceRing(selected, c, shape)
+                .padding(if (selected) 2.2.dp else 0.6.dp)
+                .clip(shape)
+                .background(MaterialPreviewGradient)
+                .drawBehind {
+                    val stripe = 5.dp.toPx()
+                    val gap = 13.dp.toPx()
+                    var x = 0f
+                    while (x < size.width) {
+                        drawRect(
+                            color = Color.White.copy(alpha = 0.28f),
+                            topLeft = Offset(x, 0f),
+                            size = Size(stripe, size.height)
+                        )
+                        x += gap
+                    }
+                }
+        ) {
+            val capsule = GlassShapes.capsule
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(10.dp)
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .shadow(4.dp, capsule, clip = false)
+                    .clip(capsule)
+                    .background(if (tinted) Color(0xD1FFFFFF) else Color(0x28FFFFFF))
+                    .glassHighlight(capsule, Color.White.copy(alpha = 0.95f))
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val ink = if (tinted) Color.Black.copy(alpha = 0.72f) else Color.White
+                Box(Modifier.size(12.dp).clip(RoundedCornerShape(4.dp)).background(ink))
+                Box(Modifier.size(12.dp).clip(CircleShape).background(ink))
+                Box(Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(ink))
+            }
+        }
+    }
+}
+
+@Composable
+private fun WallpaperPreviewCard(
+    wallpaper: GlassWallpaper,
+    isDark: Boolean,
+    palette: LiquidPalette,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val c = Glass.colors
+    val shape = RoundedCornerShape(14.dp)
+    val accent = palette.getAccent(isDark)
+    Column(
+        modifier = modifier
+            .defaultMinSize(minHeight = 48.dp)
+            .clip(shape)
+            .selectable(
+                selected = selected,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.RadioButton,
+                onClick = onClick
+            )
+            .semantics {
+                contentDescription = wallpaper.persianName
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(68.dp)
+                .previewChoiceRing(selected, c, shape)
+                .padding(if (selected) 2.dp else 0.6.dp)
+                .clip(shape)
+                .drawBehind {
+                    drawGlassWallpaper(wallpaper, isDark, accent)
+                }
+        ) {
+            // Mini frosted glass pill inside wallpaper preview
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth(0.72f)
+                    .height(22.dp)
+                    .clip(GlassShapes.capsule)
+                    .background(
+                        if (wallpaper.isDarkBackdrop(isDark)) {
+                            Color.White.copy(alpha = 0.18f)
+                        } else {
+                            Color.White.copy(alpha = 0.72f)
+                        }
+                    )
+                    .glassHighlight(GlassShapes.capsule, Color.White.copy(alpha = 0.75f))
+            )
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(5.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(c.tint),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = onColorFor(c.tint),
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+        }
+        Text(
+            text = wallpaper.persianName,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) c.tint else c.label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun GroupedToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 60.dp)
+            .clickable(enabled = enabled) { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (enabled) LiquidTheme.textPrimary else LiquidTheme.textSecondary.copy(alpha = 0.55f)
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = LiquidTheme.textSecondary.copy(alpha = if (enabled) 0.90f else 0.50f)
+            )
+        }
+        LiquidSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled
+        )
+    }
+}
+
+@Composable
+private fun GlassFooterNote(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = LiquidTheme.textSecondary,
+        modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
 private fun PaletteCard(
     palette: LiquidPalette,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val c = Glass.colors
+    val shape = RoundedCornerShape(20.dp)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(72.dp)
+            .testTag("palette_card_${palette.id.lowercase()}")
+            .semantics {
+                role = Role.RadioButton
+                selected = isSelected
+                contentDescription = palette.persianName
+            }
+            .then(
+                if (isSelected) {
+                    Modifier.border(2.2.dp, palette.dayAccent, shape)
+                } else {
+                    Modifier.glassRim(shape, c, 0.8.dp)
+                }
+            )
             .liquidTapEffect { onClick() },
-        shape = RoundedCornerShape(20.dp),
+        shape = shape,
         color = Color.Transparent
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(palette.getCardGradient())
-                .background(Color.Black.copy(alpha = 0.24f))
+                .background(Color.Black.copy(alpha = 0.20f))
+                .glassHighlight(shape, Color.White.copy(alpha = 0.45f), 1.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -1824,12 +2373,27 @@ private fun PaletteCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = palette.persianName,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(palette.dayAccent)
+                            .border(1.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                    )
+                    Text(
+                        text = palette.persianName,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
                 if (isSelected) {
                     Box(
@@ -1842,7 +2406,7 @@ private fun PaletteCard(
                         Icon(
                             imageVector = Icons.Filled.Check,
                             contentDescription = null,
-                            tint = palette.dayAccent,
+                            tint = palette.gradientStart,
                             modifier = Modifier.size(16.dp)
                         )
                     }

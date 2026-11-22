@@ -72,7 +72,7 @@ fun AnalysisScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("analysis_screen"),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = com.example.ui.components.LocalLiquidBottomClearance.current + 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // 1. Inline Top Bar

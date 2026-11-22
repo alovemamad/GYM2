@@ -6,11 +6,17 @@ import android.os.Build
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -21,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,149 +38,83 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.R
+import com.example.ui.glass.*
 import com.example.ui.theme.*
 import com.example.util.PersianNumberHelper
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-
-// Haze (iOS blur integration)
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.haze
-import dev.chrisbanes.haze.hazeChild
-
-// CompositionLocal for HazeState across the entire app
-val LocalHazeState = compositionLocalOf<HazeState?> { null }
-
-private object BotanicalBackdropCache {
-    @Volatile
-    var cachedBitmap: ImageBitmap? = null
-}
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.Shadow
+import kotlin.math.roundToInt
 
 // ==========================================
 // 1. LIQUID GLASS BASE MODIFIERS & ROOT
 // ==========================================
 
+val LocalLiquidBottomClearance = staticCompositionLocalOf { 0.dp }
+
 /**
- * Root container providing the signature botanical organic backdrop and Haze blur context.
- * Matches Snipzy Live Preview screenshots exactly.
+ * Root container providing the selected organic or studio Liquid Glass wallpaper
+ * and Kyant Backdrop layer hosts.
  */
 @Composable
 fun LiquidGlassRoot(
-    hazeState: HazeState = remember { HazeState() },
+    chrome: GlassChromeBackdrops = rememberGlassChrome(),
+    motionHighlights: Boolean = Glass.look.motionHighlights,
     content: @Composable () -> Unit
 ) {
-    val isDark = LiquidTheme.isDark
-    val paletteStart by animateColorAsState(
-        targetValue = LiquidTheme.palette.gradientStart,
-        animationSpec = tween(durationMillis = 450),
-        label = "bg_palette_start"
-    )
-    val paletteEnd by animateColorAsState(
-        targetValue = LiquidTheme.palette.gradientEnd,
-        animationSpec = tween(durationMillis = 450),
-        label = "bg_palette_end"
-    )
-    val paletteAccent by animateColorAsState(
-        targetValue = LiquidTheme.accentColor,
-        animationSpec = tween(durationMillis = 450),
-        label = "bg_palette_accent"
-    )
+    val c = Glass.colors
+    val look = Glass.look
+    val tilt = rememberGlassTilt(enabled = motionHighlights && !c.reduced)
 
-    val baseTint by animateColorAsState(
-        targetValue = LiquidTheme.backgroundNeutral,
-        animationSpec = tween(durationMillis = 350),
-        label = "bg_base_tint"
-    )
-    val atmosphericBrush = remember(isDark, baseTint, paletteStart, paletteEnd, paletteAccent) {
-        if (isDark) {
-            Brush.verticalGradient(
-                colors = listOf(
-                    paletteEnd.copy(alpha = 0.62f),
-                    baseTint.copy(alpha = 0.44f),
-                    paletteAccent.copy(alpha = 0.16f)
-                )
-            )
-        } else {
-            val topTint = androidx.compose.ui.graphics.lerp(paletteStart, Color(0xFF0D1722), 0.30f).copy(alpha = 0.26f)
-            val midTint = androidx.compose.ui.graphics.lerp(paletteAccent, Color(0xFF0D1722), 0.25f).copy(alpha = 0.12f)
-            val botTint = androidx.compose.ui.graphics.lerp(paletteEnd, Color(0xFF0D1722), 0.30f).copy(alpha = 0.28f)
-            Brush.verticalGradient(
-                colors = listOf(topTint, midTint, botTint)
-            )
-        }
-    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        GlassWallpaperLayer(
+            backdrop = chrome.wall,
+            palette = LiquidTheme.palette,
+            isDark = LiquidTheme.isDark,
+            wallpaper = look.wallpaper
+        )
 
-    val context = LocalContext.current
-    val backdropBitmap by produceState<ImageBitmap?>(
-        initialValue = BotanicalBackdropCache.cachedBitmap,
-        key1 = Unit
-    ) {
-        if (value == null) {
-            val decoded = withContext(Dispatchers.IO) {
-                BotanicalBackdropCache.cachedBitmap ?: run {
-                    val opts = BitmapFactory.Options().apply {
-                        inPreferredConfig = Bitmap.Config.RGB_565
-                    }
-                    BitmapFactory.decodeResource(context.resources, R.drawable.img_liquid_glass_bg, opts)
-                        ?.asImageBitmap()
-                        ?.also { BotanicalBackdropCache.cachedBitmap = it }
-                }
-            }
-            value = decoded
-        }
-    }
-
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Dedicated background sibling that captures the botanical texture & palette atmosphere for Haze
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF0B1A10))
-                .haze(state = hazeState)
-        ) {
-            // High-resolution botanical foliage background decoded asynchronously on Dispatchers.IO
-            backdropBitmap?.let { bmp ->
-                Image(
-                    bitmap = bmp,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            // Dynamic palette-reactive atmospheric depth overlay
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(atmosphericBrush)
-            )
-        }
-
-        // Foreground content sibling (contains all liquid glass components)
-        Box(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            CompositionLocalProvider(LocalHazeState provides hazeState) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            CompositionLocalProvider(
+                LocalGlassChrome provides chrome,
+                LocalGlassTilt provides tilt
+            ) {
                 content()
             }
         }
@@ -181,87 +122,129 @@ fun LiquidGlassRoot(
 }
 
 /**
- * Primary Liquid Glass modifier:
- * - Deep frosted backdrop blur with Haze (22dp)
- * - Translucent refractive HazeTint reactive to appearance mode & active palette
- * - Crisp curved-crystal specular highlight border & inner glossy sheen
- * - Soft accent-tinted ambient shadow
+ * Primary Liquid Glass modifier powered by Kyant Backdrop + ZedSecure crystal highlights:
+ * - Real-time Backdrop blur + vibrancy (+ optional lens refraction on API 33+)
+ * - Adaptive Clear / Tinted material translucency & Reduce Transparency fallback
+ * - Crisp top inner highlight & diagonal specular crystal rim
  */
 @Composable
 fun Modifier.liquidGlass(
-    hazeState: HazeState? = LocalHazeState.current,
+    useBackdrop: Boolean = true,
+    backdrop: Backdrop? = LocalGlassChrome.current?.wall,
     shape: Shape = RoundedCornerShape(22.dp),
     tintAlpha: Float = if (LiquidTheme.isDark) 0.38f else 0.40f,
     elevation: Dp = 8.dp,
-    borderAlpha: Float = if (LiquidTheme.isDark) 0.68f else 0.78f
+    borderAlpha: Float = if (LiquidTheme.isDark) 0.68f else 0.78f,
+    refraction: Boolean = false
 ): Modifier {
+    val c = Glass.colors
+    val look = Glass.look
+    val tilt = LocalGlassTilt.current
     val isDark = LiquidTheme.isDark
     val accent = LiquidTheme.accentColor
-    val paletteStart = LiquidTheme.palette.gradientStart
-    val glassBase = LiquidTheme.glassSurfaceColor
-    val bgColor = remember(glassBase, tintAlpha) {
-        glassBase.copy(alpha = tintAlpha)
+
+    val targetAlpha = when {
+        c.reduced -> 0.96f
+        c.material == GlassMaterial.TINTED -> maxOf(tintAlpha, c.module.alpha)
+        c.wallpaper != GlassWallpaper.BOTANICAL -> c.module.alpha
+        else -> tintAlpha
     }
-    val fallbackColor = remember(glassBase, isDark, tintAlpha) {
-        glassBase.copy(alpha = (tintAlpha + if (isDark) 0.32f else 0.30f).coerceAtMost(0.92f))
+    val surfaceColor = remember(c.cell, targetAlpha) {
+        c.cell.copy(alpha = targetAlpha)
     }
 
-    // Specular border gradient: crisp crystal rim highlight in both Day and Night modes
-    val borderBrush = remember(isDark, accent, paletteStart, borderAlpha) {
+    val renderLiveBlur = useBackdrop && backdrop != null && !c.reduced && look.glassLists && isGlassRenderEffectSupported()
+
+    if (renderLiveBlur && backdrop != null) {
+        return this.drawBackdrop(
+            backdrop = backdrop,
+            shape = { shape },
+            effects = {
+                vibrancy()
+                blur(14.dp.toPx())
+                if (refraction && isGlassLensSupported()) {
+                    lens(12.dp.toPx(), 22.dp.toPx())
+                }
+            },
+            highlight = { glassHighlightOf(tilt) },
+            shadow = if (elevation > 0.dp) {
+                {
+                    Shadow(
+                        radius = elevation * 2f,
+                        color = if (c.darkBackdrop) Color.Black.copy(alpha = 0.42f) else c.shadow
+                    )
+                }
+            } else {
+                null
+            },
+            onDrawSurface = {
+                drawRect(surfaceColor)
+                drawRect(
+                    Brush.verticalGradient(
+                        0f to Color.White.copy(alpha = if (c.darkBackdrop) 0.12f else 0.24f),
+                        0.45f to accent.copy(alpha = if (c.darkBackdrop) 0.04f else 0.03f),
+                        1f to Color.Transparent
+                    )
+                )
+            }
+        )
+    }
+
+    val fallbackColor = when {
+        c.reduced || !look.glassLists -> c.solidCell
+        c.wallpaper != GlassWallpaper.BOTANICAL -> lerp(c.solidCell, surfaceColor, 0.45f).copy(alpha = maxOf(surfaceColor.alpha, 0.86f))
+        else -> surfaceColor.copy(alpha = (targetAlpha + if (isDark) 0.30f else 0.28f).coerceAtMost(0.94f))
+    }
+
+    val borderBrush = remember(c.rimHi, c.rimMid, c.rimLo, accent, borderAlpha, c.darkBackdrop) {
         Brush.linearGradient(
             colors = listOf(
-                Color.White.copy(alpha = borderAlpha),
-                accent.copy(alpha = if (isDark) 0.44f else 0.48f),
-                Color.White.copy(alpha = if (isDark) 0.16f else 0.28f),
-                paletteStart.copy(alpha = if (isDark) 0.34f else 0.40f)
+                c.rimHi.copy(alpha = borderAlpha.coerceIn(0f, 1f)),
+                accent.copy(alpha = if (c.darkBackdrop) 0.34f else 0.22f),
+                c.rimMid,
+                c.rimLo
             ),
             start = Offset(0f, 0f),
             end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
         )
     }
 
-    // Inner glossy liquid-glass reflection sheen (top crystal gleam + subtle bottom rim bounce)
-    val innerSpecularBrush = remember(isDark, accent) {
+    val innerSpecularBrush = remember(c.darkBackdrop, accent) {
         Brush.verticalGradient(
             colors = listOf(
-                Color.White.copy(alpha = if (isDark) 0.14f else 0.22f),
-                accent.copy(alpha = if (isDark) 0.04f else 0.07f),
+                Color.White.copy(alpha = if (c.darkBackdrop) 0.14f else 0.26f),
+                accent.copy(alpha = if (c.darkBackdrop) 0.04f else 0.03f),
                 Color.Transparent,
-                Color.White.copy(alpha = if (isDark) 0.04f else 0.08f)
+                Color.White.copy(alpha = if (c.darkBackdrop) 0.04f else 0.08f)
             )
         )
     }
 
-    val hazeStyle = remember(bgColor, fallbackColor) {
-        HazeStyle(
-            backgroundColor = bgColor,
-            tints = listOf(HazeTint(color = bgColor)),
-            blurRadius = 16.dp,
-            noiseFactor = 0.04f,
-            fallbackTint = HazeTint(color = fallbackColor)
-        )
-    }
-
     return this
-        .shadow(
-            elevation = elevation,
-            shape = shape,
-            spotColor = accent.copy(alpha = if (isDark) 0.28f else 0.22f),
-            ambientColor = Color.Black.copy(alpha = if (isDark) 0.22f else 0.10f)
-        )
-        .clip(shape)
         .then(
-            if (hazeState != null) {
-                Modifier.hazeChild(
-                    state = hazeState,
-                    style = hazeStyle
+            if (elevation > 0.dp) {
+                Modifier.shadow(
+                    elevation = elevation,
+                    shape = shape,
+                    spotColor = if (c.darkBackdrop) accent.copy(alpha = 0.24f) else c.shadow,
+                    ambientColor = c.shadow
                 )
             } else {
-                Modifier.background(bgColor)
+                Modifier
             }
         )
-        .background(innerSpecularBrush)
-        .border(BorderStroke(1.2.dp, borderBrush), shape = shape)
+        .clip(shape)
+        .background(fallbackColor)
+        .then(
+            if (!c.reduced) {
+                Modifier
+                    .background(innerSpecularBrush)
+                    .glassHighlight(shape, c.highlight)
+                    .border(BorderStroke(1.dp, borderBrush), shape = shape)
+            } else {
+                Modifier.border(0.75.dp, c.separator, shape = shape)
+            }
+        )
 }
 
 /**
@@ -304,14 +287,14 @@ fun Modifier.liquidTapEffect(
 @Composable
 fun SolidGroupedCard(
     modifier: Modifier = Modifier,
-    hazeState: HazeState? = LocalHazeState.current,
+    useBackdrop: Boolean = true,
     shape: Shape = RoundedCornerShape(24.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .liquidGlass(hazeState = hazeState, shape = shape, elevation = 6.dp)
+            .liquidGlass(useBackdrop = useBackdrop, shape = shape, elevation = 6.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -323,13 +306,21 @@ fun SolidGroupedCard(
 @Composable
 fun LiquidGlassBox(
     modifier: Modifier = Modifier,
-    hazeState: HazeState? = LocalHazeState.current,
+    useBackdrop: Boolean = true,
+    backdrop: Backdrop? = LocalGlassChrome.current?.wall,
+    refraction: Boolean = false,
     shape: Shape = RoundedCornerShape(24.dp),
     elevation: Dp = 8.dp,
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(
-        modifier = modifier.liquidGlass(hazeState = hazeState, shape = shape, elevation = elevation),
+        modifier = modifier.liquidGlass(
+            useBackdrop = useBackdrop,
+            backdrop = backdrop,
+            refraction = refraction,
+            shape = shape,
+            elevation = elevation
+        ),
         content = content
     )
 }
@@ -341,6 +332,7 @@ fun LiquidSectionHeader(
     actionText: String? = null,
     onActionClick: (() -> Unit)? = null
 ) {
+    val darkBackdrop = Glass.colors.darkBackdrop
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -352,11 +344,15 @@ fun LiquidSectionHeader(
             text = title,
             style = MaterialTheme.typography.titleMedium.copy(
                 fontSize = 15.sp,
-                shadow = androidx.compose.ui.graphics.Shadow(
-                    color = Color.Black.copy(alpha = 0.55f),
-                    offset = Offset(0f, 1.5f),
-                    blurRadius = 4f
-                )
+                shadow = if (darkBackdrop) {
+                    androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black.copy(alpha = 0.55f),
+                        offset = Offset(0f, 1.5f),
+                        blurRadius = 4f
+                    )
+                } else {
+                    null
+                }
             ),
             color = LiquidTheme.textSecondary,
             fontWeight = FontWeight.SemiBold
@@ -390,17 +386,27 @@ fun GroupedRow(
     trailingContent: (@Composable () -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val badgeShape = RoundedCornerShape(12.dp)
+    val badgeBrush = remember(iconTint, iconBackground) {
+        val base = iconBackground ?: iconTint
+        Brush.verticalGradient(
+            0f to lerp(base, Color.White, 0.24f),
+            0.62f to base,
+            1f to lerp(base, Color.Black, 0.10f)
+        )
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 52.dp)
                 .clickable(
                     interactionSource = interactionSource,
-                    indication = ripple(),
+                    indication = glassRowIndication(),
                     enabled = onClick != null
                 ) { onClick?.invoke() }
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -412,17 +418,14 @@ fun GroupedRow(
                 if (icon != null) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(iconBackground ?: iconTint.copy(alpha = 0.16f))
-                            .border(
-                                0.5.dp,
-                                Color.White.copy(alpha = 0.25f),
-                                RoundedCornerShape(12.dp)
-                            ),
+                            .size(40.dp)
+                            .shadow(1.5.dp, badgeShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.28f), spotColor = Color.Black.copy(alpha = 0.28f))
+                            .clip(badgeShape)
+                            .background(badgeBrush)
+                            .glassHighlight(badgeShape, Color.White.copy(alpha = 0.45f), 0.75.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp))
+                        Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -573,7 +576,7 @@ fun CircularShortcut(
         Box(
             Modifier
                 .size(60.dp)
-                .liquidGlass(shape = CircleShape, elevation = 4.dp),
+                .liquidGlass(shape = CircleShape, elevation = 4.dp, refraction = true),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, label, tint = iconTint, modifier = Modifier.size(26.dp))
@@ -581,11 +584,15 @@ fun CircularShortcut(
         Text(
             label,
             style = MaterialTheme.typography.labelSmall.copy(
-                shadow = androidx.compose.ui.graphics.Shadow(
-                    color = Color.Black.copy(alpha = 0.55f),
-                    offset = Offset(0f, 1f),
-                    blurRadius = 3f
-                )
+                shadow = if (Glass.colors.darkBackdrop) {
+                    androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black.copy(alpha = 0.55f),
+                        offset = Offset(0f, 1f),
+                        blurRadius = 3f
+                    )
+                } else {
+                    null
+                }
             ),
             color = LiquidTheme.textPrimary,
             fontWeight = FontWeight.Medium,
@@ -712,24 +719,23 @@ fun LiquidPrimaryButton(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
+            .glassPress(interactionSource, scale = 1.03f)
             .scale(scale)
-            .shadow(if (isPressed) 2.dp else 8.dp, CircleShape, spotColor = accent.copy(alpha = 0.35f))
+            .shadow(if (isPressed) 2.dp else 10.dp, CircleShape, spotColor = accent.copy(alpha = 0.40f))
             .clip(CircleShape)
             .background(buttonBrush, CircleShape)
-            .border(
-                1.dp,
-                Brush.linearGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.72f),
-                        accent.copy(alpha = 0.85f)
-                    )
-                ),
-                CircleShape
+            .background(
+                Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = if (enabled) 0.26f else 0.10f),
+                    0.52f to Color.Transparent
+                )
             )
+            .glassHighlight(CircleShape, Color.White.copy(alpha = 0.55f))
             .clickable(
                 interactionSource = interactionSource,
                 indication = ripple(),
                 enabled = enabled,
+                role = Role.Button,
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
@@ -830,19 +836,37 @@ fun LiquidCircleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
-    badgeCount: Int? = null
+    badgeCount: Int? = null,
+    size: Dp = 48.dp,
+    tint: Color = LiquidTheme.textPrimary,
+    backdrop: Backdrop? = LocalGlassChrome.current?.wall,
 ) {
+    val c = Glass.colors
+    val tilt = LocalGlassTilt.current
+    val source = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
-            .size(48.dp)
-            .liquidGlass(shape = CircleShape, elevation = 4.dp)
-            .liquidTapEffect { onClick() },
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            .glassPress(source)
+            .size(size)
+            .glassChrome(
+                c = c,
+                shape = CircleShape,
+                backdrop = backdrop,
+                refraction = true,
+                tilt = tilt,
+                useTranslucent = Glass.look.glassLists
+            )
+            .semantics {
+                if (contentDescription != null) this.contentDescription = contentDescription
+            }
+            .clickable(source, null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             icon,
-            contentDescription,
-            tint = LiquidTheme.textPrimary,
+            contentDescription = null,
+            tint = tint,
             modifier = Modifier.size(22.dp)
         )
         if (badgeCount != null && badgeCount > 0) {
@@ -865,42 +889,68 @@ fun LiquidSegmentedControl(
     onSelectIndex: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    if (items.isEmpty()) return
+    val c = Glass.colors
+    val accent = LiquidTheme.accentColor
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(46.dp)
-            .liquidGlass(shape = RoundedCornerShape(23.dp), elevation = 4.dp)
+            .height(48.dp)
+            .liquidGlass(shape = CircleShape, elevation = 4.dp, refraction = false)
             .padding(3.dp)
     ) {
+        val slot = maxWidth / items.size
+        val activeIdx = selectedIndex.coerceIn(0, items.lastIndex)
+        val x by animateDpAsState(
+            targetValue = slot * activeIdx,
+            animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
+            label = "glass_segment_pill"
+        )
+        val thumbShape = CircleShape
+        val thumbFill = if (c.darkBackdrop) {
+            accent.copy(alpha = 0.28f)
+        } else {
+            lerp(c.thumb, accent, 0.14f)
+        }
+        Box(
+            Modifier
+                .offset(x = x)
+                .width(slot)
+                .fillMaxHeight()
+                .shadow(3.dp, thumbShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.18f))
+                .clip(thumbShape)
+                .background(thumbFill)
+                .glassHighlight(thumbShape, c.highlight)
+                .border(0.8.dp, accent.copy(alpha = if (c.darkBackdrop) 0.72f else 0.45f), thumbShape)
+        )
         Row(
-            Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            Modifier
+                .fillMaxSize()
+                .selectableGroup()
         ) {
             items.forEachIndexed { index, title ->
-                val isSelected = index == selectedIndex
+                val isSelected = index == activeIdx
                 Box(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            if (isSelected) {
-                                LiquidTheme.accentColor.copy(alpha = if (LiquidTheme.isDark) 0.24f else 0.18f)
-                            } else Color.Transparent
-                        )
-                        .border(
-                            if (isSelected) 1.dp else 0.dp,
-                            if (isSelected) LiquidTheme.accentColor.copy(alpha = 0.72f) else Color.Transparent,
-                            RoundedCornerShape(20.dp)
-                        )
-                        .clickable { onSelectIndex(index) },
+                        .clip(CircleShape)
+                        .selectable(
+                            selected = isSelected,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            role = Role.Tab,
+                            onClick = { onSelectIndex(index) }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         title,
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) LiquidTheme.accentColor else LiquidTheme.textSecondary
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) (if (c.darkBackdrop) accent else c.label) else LiquidTheme.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -1118,60 +1168,71 @@ fun LiquidInputField(
 }
 
 /**
- * Snipzy Liquid Glass Toggle Switch:
- * - 54dp x 32dp capsule track with specular border
- * - 26dp sliding thumb with spring animation
- * - Glowing accent on check
+ * ZedSecure iOS Liquid Glass Toggle Switch:
+ * - 63dp x 28dp capsule track with 48dp accessible hit area
+ * - Squash-and-stretch 37dp x 24dp glowing capsule thumb
  */
 @Composable
 fun LiquidSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
-    val thumbOffset by animateFloatAsState(
-        targetValue = if (checked) 22f else 0f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f),
-        label = "switch_thumb"
-    )
-
+    val c = Glass.colors
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
     val accent = LiquidTheme.accentColor
-    val trackBrush = if (checked) {
-        Brush.horizontalGradient(
-            listOf(
-                LiquidTheme.palette.gradientStart.copy(alpha = 0.85f),
-                accent.copy(alpha = 0.90f)
-            )
-        )
-    } else {
-        val offColor = if (LiquidTheme.isDark) Color.Black.copy(alpha = 0.32f) else Color.Black.copy(alpha = 0.26f)
-        Brush.horizontalGradient(listOf(offColor, offColor))
-    }
-
-    val borderColor = if (checked) {
-        accent
-    } else {
-        if (LiquidTheme.isDark) Color.White.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.55f)
-    }
+    val track by animateColorAsState(
+        targetValue = if (checked) accent else c.fill,
+        label = "glass_switch_track"
+    )
+    val thumbX by animateDpAsState(
+        targetValue = if (checked) 24.dp else 2.dp,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow),
+        label = "glass_switch_knob"
+    )
+    val squash by animateFloatAsState(
+        targetValue = if (pressed && enabled) 1f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "glass_switch_press"
+    )
 
     Box(
         modifier = modifier
-            .size(54.dp, 32.dp)
-            .clip(CircleShape)
-            .background(trackBrush)
-            .border(1.2.dp, borderColor, CircleShape)
-            .clickable { onCheckedChange(!checked) }
-            .padding(3.dp),
-        contentAlignment = Alignment.CenterStart
+            .sizeIn(minWidth = 63.dp, minHeight = 48.dp)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
+            .toggleable(
+                value = checked,
+                interactionSource = source,
+                indication = null,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            ),
+        contentAlignment = Alignment.Center
     ) {
         Box(
-            Modifier
-                .offset(x = thumbOffset.dp)
-                .size(26.dp)
-                .shadow(4.dp, CircleShape)
-                .background(Color.White.copy(alpha = 0.96f), CircleShape)
-                .border(0.5.dp, Color.White, CircleShape)
-        )
+            modifier = Modifier
+                .size(width = 63.dp, height = 28.dp)
+                .clip(CircleShape)
+                .background(track)
+                .border(0.8.dp, if (checked) accent else c.separator, CircleShape)
+        ) {
+            Box(
+                Modifier
+                    .offset(x = thumbX, y = 2.dp)
+                    .size(width = 37.dp, height = 24.dp)
+                    .graphicsLayer {
+                        scaleX = 1f + 0.22f * squash
+                        scaleY = 1f + 0.12f * squash
+                    }
+                    .shadow(3.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.22f), spotColor = Color.Black.copy(alpha = 0.22f))
+                    .clip(CircleShape)
+                    .background(lerp(Color.White, Color.White.copy(alpha = 0.58f), squash))
+                    .then(if (squash > 0.01f) Modifier.glassHighlight(CircleShape, Color.White, 1.dp) else Modifier)
+            )
+        }
     }
 }
 
@@ -1342,78 +1403,358 @@ fun LiquidGlassSpinner(
 fun LiquidBottomBar(
     currentRoute: String,
     onNavigate: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backdrop: Backdrop? = LocalGlassChrome.current?.combined,
+    minimized: Boolean = false,
+    onExpand: () -> Unit = {}
 ) {
-    val isDark = LiquidTheme.isDark
-    val accent = LiquidTheme.accentColor
-    val paletteStart = LiquidTheme.palette.gradientStart
-    val selectedBrush = remember(isDark, accent, paletteStart) {
-        Brush.linearGradient(
-            listOf(
-                paletteStart.copy(alpha = if (isDark) 0.34f else 0.22f),
-                accent.copy(alpha = if (isDark) 0.24f else 0.16f)
-            )
-        )
-    }
+    val tabs = com.example.ui.navigation.Screen.bottomNavItems
+    val currentScreen = tabs.firstOrNull { it.route == currentRoute } ?: tabs.first()
+    val tilt = LocalGlassTilt.current
+    val effectiveMinimized = minimized && Glass.look.shrinkTabBar
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 20.dp, vertical = 12.dp)
-            .height(72.dp)
-            .liquidGlass(
-                shape = RoundedCornerShape(36.dp),
-                elevation = 12.dp,
-                tintAlpha = if (isDark) 0.42f else 0.52f,
-                borderAlpha = if (isDark) 0.72f else 0.85f
-            )
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .height(66.dp)
     ) {
-        Row(
-            Modifier
-                .fillMaxSize()
-                .padding(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            com.example.ui.navigation.Screen.bottomNavItems.forEach { screen ->
-                val selected = currentRoute == screen.route
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(28.dp))
-                        .then(
-                            if (selected) Modifier.background(selectedBrush) else Modifier
-                        )
-                        .border(
-                            1.dp,
-                            if (selected) accent.copy(alpha = 0.78f) else Color.Transparent,
-                            RoundedCornerShape(28.dp)
-                        )
-                        .clickable { onNavigate(screen.route) },
-                    contentAlignment = Alignment.Center
+        AnimatedContent(
+            targetState = effectiveMinimized,
+            transitionSpec = {
+                (fadeIn(tween(180)) + scaleIn(initialScale = 0.9f)) togetherWith
+                    (fadeOut(tween(150)) + scaleOut(targetScale = 0.9f))
+            },
+            label = "glass_bottom_bar_mode"
+        ) { isMini ->
+            if (isMini) {
+                val c = Glass.colors
+                val source = remember { MutableInteractionSource() }
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Row(
+                        modifier = Modifier
+                            .height(58.dp)
+                            .glassPress(source)
+                            .glassChrome(
+                                c = c,
+                                shape = GlassShapes.capsule,
+                                backdrop = backdrop,
+                                refraction = true,
+                                tilt = tilt
+                            )
+                            .testTag("bottom_bar_expand_pill")
+                            .clickable(
+                                interactionSource = source,
+                                indication = null,
+                                role = Role.Button,
+                                onClick = onExpand
+                            )
+                            .padding(horizontal = 18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            if (selected) screen.selectedIcon else screen.unselectedIcon,
-                            screen.title,
-                            tint = if (selected) accent else LiquidTheme.textSecondary,
-                            modifier = Modifier.size(24.dp)
+                            currentScreen.selectedIcon,
+                            contentDescription = "باز کردن منو",
+                            tint = LiquidTheme.accentColor,
+                            modifier = Modifier.size(22.dp)
                         )
                         Text(
-                            screen.title,
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) accent else LiquidTheme.textSecondary
+                            currentScreen.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = c.label,
+                            maxLines = 1
+                        )
+                        Icon(
+                            Icons.Filled.KeyboardArrowUp,
+                            contentDescription = null,
+                            tint = c.label2,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            } else {
+                GlassBottomTabPill(
+                    tabs = tabs,
+                    currentRoute = currentRoute,
+                    onNavigate = onNavigate,
+                    backdrop = backdrop,
+                    tilt = tilt,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlassBottomTabPill(
+    tabs: List<com.example.ui.navigation.Screen>,
+    currentRoute: String,
+    onNavigate: (String) -> Unit,
+    backdrop: Backdrop?,
+    tilt: State<Float>?,
+    modifier: Modifier = Modifier
+) {
+    if (tabs.isEmpty()) return
+    val c = Glass.colors
+    val accent = LiquidTheme.accentColor
+    val density = LocalDensity.current
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val haptics = LocalHapticFeedback.current
+    val exported = rememberLayerBackdrop()
+    val navigate by rememberUpdatedState(onNavigate)
+
+    var holding by remember { mutableStateOf(false) }
+    var holdX by remember { mutableFloatStateOf(0f) }
+    val currentIndex = tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+
+    BoxWithConstraints(modifier = modifier) {
+        val pad = 4.dp
+        val tabWidth = (maxWidth - pad * 2) / tabs.size
+        val tabPx = with(density) { tabWidth.toPx() }.coerceAtLeast(1f)
+        val padPx = with(density) { pad.toPx() }
+        val pillWidth = maxWidth
+        val widthPx = with(density) { pillWidth.toPx() }.coerceAtLeast(1f)
+        val pillHeight = maxHeight
+
+        fun indexAt(x: Float): Int {
+            val slot = ((x - padPx) / tabPx).toInt().coerceIn(0, tabs.lastIndex)
+            return if (rtl) tabs.lastIndex - slot else slot
+        }
+
+        val hoverIndex = if (holding) indexAt(holdX) else -1
+        val barScale by animateFloatAsState(
+            targetValue = if (holding) 1.03f else 1f,
+            animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+            label = "glass_bar_scale"
+        )
+        val platterX by animateDpAsState(
+            targetValue = tabWidth * currentIndex,
+            animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
+            label = "glass_bar_platter"
+        )
+        val platterAlpha by animateFloatAsState(
+            targetValue = if (holding) 0f else 1f,
+            label = "glass_bar_platter_alpha"
+        )
+        val shape = GlassShapes.capsule
+        val canRenderLive = backdrop != null && !c.reduced && isGlassRenderEffectSupported()
+        val surface = if (canRenderLive) c.chrome else c.chromeSolid.copy(alpha = 0.94f)
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = barScale
+                    scaleY = barScale
+                }
+                .then(
+                    if (canRenderLive && backdrop != null) {
+                        Modifier.drawBackdrop(
+                            backdrop = backdrop,
+                            shape = { shape },
+                            effects = {
+                                vibrancy()
+                                blur(12.dp.toPx())
+                                if (isGlassLensSupported()) {
+                                    lens(14.dp.toPx(), 26.dp.toPx())
+                                }
+                            },
+                            highlight = { glassHighlightOf(tilt) },
+                            shadow = { Shadow(radius = 22.dp, color = c.shadow) },
+                            exportedBackdrop = exported,
+                            onDrawSurface = { drawRect(surface) }
+                        )
+                    } else {
+                        Modifier.glassChrome(
+                            c = c,
+                            shape = shape,
+                            backdrop = null,
+                            refraction = false,
+                            tilt = tilt
+                        )
+                    }
+                )
+                .pointerInput(tabs, rtl, tabPx, padPx) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var cancelled = false
+                        val up = withTimeoutOrNull(180L) {
+                            waitForUpOrCancellation().also { if (it == null) cancelled = true }
+                        }
+                        if (cancelled) return@awaitEachGesture
+                        if (up != null) {
+                            up.consume()
+                            navigate(tabs[indexAt(up.position.x)].route)
+                            return@awaitEachGesture
+                        }
+                        holdX = down.position.x
+                        holding = true
+                        var lastHovered = indexAt(holdX)
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) {
+                                    change.consume()
+                                    navigate(tabs[indexAt(change.position.x)].route)
+                                    break
+                                }
+                                holdX = change.position.x
+                                val newHovered = indexAt(holdX)
+                                if (newHovered != lastHovered) {
+                                    lastHovered = newHovered
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                                change.consume()
+                            }
+                        } finally {
+                            holding = false
+                        }
+                    }
+                }
+        ) {
+            Box(
+                Modifier
+                    .offset(x = pad + platterX, y = pad)
+                    .width(tabWidth)
+                    .fillMaxHeight()
+                    .padding(bottom = pad * 2)
+                    .graphicsLayer { alpha = platterAlpha }
+                    .clip(shape)
+                    .background(lerp(c.platter, accent.copy(alpha = if (c.darkBackdrop) 0.24f else 0.14f), 0.45f))
+                    .glassHighlight(shape, c.highlight.copy(alpha = 0.65f), 0.75.dp)
+            )
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(pad)
+            ) {
+                tabs.forEachIndexed { index, screen ->
+                    val on = screen.route == currentRoute
+                    val color = when {
+                        holding -> if (index == hoverIndex) accent else c.label
+                        on -> accent
+                        else -> c.label2
+                    }
+                    LiquidTabCell(
+                        screen = screen,
+                        selected = on,
+                        color = color,
+                        modifier = Modifier
+                            .testTag("nav_${screen.route}")
+                            .semantics {
+                                role = Role.Tab
+                                selected = on
+                                contentDescription = screen.title
+                                onClick {
+                                    onNavigate(screen.route)
+                                    true
+                                }
+                            }
+                    )
+                }
+            }
+        }
+
+        if (holding) {
+            val bubbleWidth = tabWidth + 14.dp
+            val bubblePx = with(density) { bubbleWidth.toPx() }
+            val lift = with(density) { 5.dp.toPx() }
+            val left = (holdX - bubblePx / 2f).coerceIn(
+                -8f * density.density,
+                widthPx - bubblePx + 8f * density.density
+            )
+            val bubbleShape = GlassShapes.capsule
+            val lensBackdrop = if (canRenderLive && backdrop != null) {
+                rememberCombinedBackdrop(backdrop, exported)
+            } else {
+                null
+            }
+            val bubble = Modifier
+                .align(AbsoluteAlignment.TopLeft)
+                .absoluteOffset { IntOffset(left.roundToInt(), -lift.roundToInt()) }
+                .size(bubbleWidth, pillHeight + 10.dp)
+
+            Box(
+                bubble.then(
+                    if (lensBackdrop != null && isGlassLensSupported()) {
+                        Modifier.drawBackdrop(
+                            backdrop = lensBackdrop,
+                            shape = { bubbleShape },
+                            effects = { lens(12.dp.toPx(), 24.dp.toPx(), chromaticAberration = true) },
+                            highlight = { Highlight(width = 1.dp, alpha = 1f) },
+                            shadow = { Shadow(radius = 22.dp, offset = DpOffset(0.dp, 8.dp), color = Color.Black.copy(alpha = 0.2f)) },
+                            onDrawBackdrop = { drawIt -> scale(1.18f, 1.18f, center) { drawIt() } },
+                            onDrawSurface = { drawRect(Color.White.copy(alpha = if (c.darkBackdrop) 0.05f else 0.14f)) }
+                        )
+                    } else {
+                        Modifier.glassChrome(c, bubbleShape, backdrop = null, surface = c.thumb)
+                    }
+                )
+            )
+            Box(bubble.clip(bubbleShape)) {
+                Row(
+                    Modifier
+                        .wrapContentSize(AbsoluteAlignment.TopLeft, unbounded = true)
+                        .absoluteOffset { IntOffset((-left).roundToInt(), lift.roundToInt()) }
+                        .size(pillWidth, pillHeight)
+                        .graphicsLayer {
+                            scaleX = 1.18f
+                            scaleY = 1.18f
+                            transformOrigin = TransformOrigin((holdX / widthPx).coerceIn(0f, 1f), 0.5f)
+                        }
+                        .padding(pad)
+                ) {
+                    tabs.forEachIndexed { index, screen ->
+                        LiquidTabCell(
+                            screen = screen,
+                            selected = index == hoverIndex,
+                            color = if (index == hoverIndex) accent else c.label
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RowScope.LiquidTabCell(
+    screen: com.example.ui.navigation.Screen,
+    selected: Boolean,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier
+            .weight(1f)
+            .fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)
+    ) {
+        Icon(
+            if (selected) screen.selectedIcon else screen.unselectedIcon,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(23.dp)
+        )
+        Text(
+            screen.title,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -1440,7 +1781,8 @@ fun LiquidTopBar(
                     shape = RoundedCornerShape(28.dp),
                     elevation = 6.dp,
                     tintAlpha = if (LiquidTheme.isDark) 0.38f else 0.48f,
-                    borderAlpha = if (LiquidTheme.isDark) 0.75f else 0.85f
+                    borderAlpha = if (LiquidTheme.isDark) 0.75f else 0.85f,
+                    refraction = true
                 )
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1508,7 +1850,7 @@ fun LiquidAlertDialog(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.75f))
+                .background(Color.Black.copy(alpha = 0.72f))
                 .clickable { onDismissRequest() },
             contentAlignment = Alignment.Center
         ) {
@@ -1517,9 +1859,9 @@ fun LiquidAlertDialog(
                     .width(320.dp)
                     .clickable(enabled = false) {}
                     .liquidGlass(
-                        hazeState = null,
+                        useBackdrop = false,
                         shape = RoundedCornerShape(26.dp),
-                        tintAlpha = if (LiquidTheme.isDark) 0.90f else 0.95f,
+                        tintAlpha = if (LiquidTheme.isDark) 0.92f else 0.96f,
                         elevation = 16.dp
                     )
             ) {
@@ -1792,7 +2134,8 @@ fun LiquidRestTimerDock(
     onAdd15Seconds: () -> Unit,
     onCancel: () -> Unit,
     onClickDock: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    backdrop: Backdrop? = LocalGlassChrome.current?.combined
 ) {
     AnimatedVisibility(
         visible = isActive,
@@ -1805,6 +2148,8 @@ fun LiquidRestTimerDock(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp)
                 .clickable { onClickDock() },
+            backdrop = backdrop,
+            refraction = true,
             shape = RoundedCornerShape(26.dp),
             elevation = 10.dp
         ) {

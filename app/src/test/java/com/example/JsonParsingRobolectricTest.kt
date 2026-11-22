@@ -143,4 +143,46 @@ class JsonParsingRobolectricTest {
         assertNull(flatEx.supersetGroup)
         assertNull(flatEx.customMetrics)
     }
+
+    @Test
+    fun backupParsing_roundTripsGlassSettingsAndMigratesLegacyPalettes() {
+        val originalSettings = com.example.data.local.UserSettings(
+            userName = "Sina",
+            appearanceMode = "LIGHT",
+            accentPalette = "PLATINUM_STEEL",
+            glassMaterial = "TINTED",
+            glassWallpaper = "LAGOON",
+            glassLists = false,
+            shrinkTabBar = false,
+            motionHighlights = true,
+            reduceTransparency = true
+        )
+
+        val json = BackupHelper.createBackupJson(
+            settings = originalSettings,
+            plans = emptyList(),
+            exercises = emptyList(),
+            histories = emptyList(),
+            skips = emptyList(),
+            supplements = emptyList(),
+            supplementHistories = emptyList(),
+            nutritionLogs = emptyList(),
+            measurements = emptyList()
+        )
+
+        val parsed = BackupHelper.validateAndParseBackup(json)
+        assertTrue(parsed.isSuccess)
+        val restored = parsed.getOrThrow().settings
+        assertEquals("PLATINUM_STEEL", restored.accentPalette)
+        assertEquals("TINTED", restored.glassMaterial)
+        assertEquals("LAGOON", restored.glassWallpaper)
+        assertEquals(false, restored.glassLists)
+        assertEquals(false, restored.shrinkTabBar)
+        assertEquals(true, restored.motionHighlights)
+        assertEquals(true, restored.reduceTransparency)
+
+        val legacyJson = json.replace("\"PLATINUM_STEEL\"", "\"CYBER\"")
+        val legacyParsed = BackupHelper.validateAndParseBackup(legacyJson).getOrThrow().settings
+        assertEquals("PLATINUM_STEEL", legacyParsed.accentPalette)
+    }
 }

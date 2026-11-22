@@ -22,6 +22,12 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.example.ui.glass.Glass
+import com.example.ui.glass.GlassLook
+import com.example.ui.glass.GlassMaterial
+import com.example.ui.glass.GlassPalette
+import com.example.ui.glass.GlassWallpaper
+import com.example.ui.glass.LocalGlassLook
 import kotlin.math.max
 import kotlin.math.min
 
@@ -116,10 +122,15 @@ object LiquidTheme {
         @ReadOnlyComposable
         get() = LocalIsDarkTheme.current
 
+    val glassColors
+        @Composable
+        @ReadOnlyComposable
+        get() = Glass.colors
+
     val accentColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = palette.getAccent(isDark)
+        get() = Glass.colors.tint
 
     // رنگ آیکون‌ها و برجسته‌سازی‌ها: همگی از پالت انتخابی کاربر ساخته می‌شوند
     val iconRed: Color
@@ -163,46 +174,46 @@ object LiquidTheme {
 
     /**
      * رنگ پایه کپسول‌ها و سطوح شیشه‌ای بدون نور سفید خیره‌کننده در روز
-     * و با عمق رنگی هماهنگ با پالت در شب.
+     * و با عمق رنگی هماهنگ با پالت در شب و پس‌زمینه انتخابی کاربر.
      */
     val glassSurfaceColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = liquidGlassSurfaceColor(palette, isDark)
+        get() = Glass.colors.cell
 
     val surfaceSolid: Color
         @Composable
         @ReadOnlyComposable
-        get() = liquidSurfaceSolidColor(palette, isDark)
+        get() = Glass.colors.solidCell
 
     val surfaceElevated: Color
         @Composable
         @ReadOnlyComposable
-        get() = liquidSurfaceElevatedColor(palette, isDark)
+        get() = Glass.colors.elevatedCell
 
     val backgroundNeutral: Color
         @Composable
         @ReadOnlyComposable
-        get() = liquidBackgroundNeutralColor(palette, isDark)
+        get() = if (Glass.colors.wallpaper == GlassWallpaper.BOTANICAL) {
+            liquidBackgroundNeutralColor(palette, isDark)
+        } else {
+            GlassPalette.wallpaperTop(Glass.colors.wallpaper, palette, isDark)
+        }
 
     val dividerColor: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isDark) {
-            Color.White.copy(alpha = 0.14f)
-        } else {
-            Color.White.copy(alpha = 0.20f)
-        }
+        get() = Glass.colors.separator
 
     val textPrimary: Color
         @Composable
         @ReadOnlyComposable
-        get() = liquidTextPrimaryColor(isDark)
+        get() = Glass.colors.label
 
     val textSecondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = liquidTextSecondaryColor(palette, isDark)
+        get() = Glass.colors.label2
 }
 
 fun createLiquidColorScheme(palette: LiquidPalette, isDark: Boolean): ColorScheme {
@@ -270,6 +281,12 @@ fun getThemeColorScheme(themeName: String, systemIsDark: Boolean): ColorScheme {
 fun GymTheme(
     appearanceMode: String = "SYSTEM",
     accentPalette: String = "SPORT_RED",
+    glassMaterial: String = "CLEAR",
+    glassWallpaper: String = "BOTANICAL",
+    glassLists: Boolean = true,
+    shrinkTabBar: Boolean = true,
+    motionHighlights: Boolean = false,
+    reduceTransparency: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val systemIsDark = isSystemInDarkTheme()
@@ -280,25 +297,89 @@ fun GymTheme(
     }
 
     val palette = LiquidPalettes.fromId(accentPalette)
-    val colorScheme = createLiquidColorScheme(palette, isDark)
-    val defaultInk = liquidTextPrimaryColor(isDark)
+    val resolvedMaterial = GlassMaterial.fromId(glassMaterial)
+    val resolvedWallpaper = GlassWallpaper.fromId(glassWallpaper)
+    val glassColors = androidx.compose.runtime.remember(
+        isDark,
+        palette,
+        resolvedMaterial,
+        resolvedWallpaper,
+        glassLists,
+        reduceTransparency
+    ) {
+        GlassPalette.of(
+            dark = isDark,
+            palette = palette,
+            material = resolvedMaterial,
+            wallpaper = resolvedWallpaper,
+            glassLists = glassLists,
+            reduceTransparency = reduceTransparency
+        )
+    }
+    val glassLook = androidx.compose.runtime.remember(
+        glassColors,
+        resolvedMaterial,
+        resolvedWallpaper,
+        glassLists,
+        shrinkTabBar,
+        motionHighlights,
+        reduceTransparency
+    ) {
+        GlassLook(
+            colors = glassColors,
+            material = resolvedMaterial,
+            wallpaper = resolvedWallpaper,
+            glassLists = glassLists,
+            shrinkTabBar = shrinkTabBar,
+            motionHighlights = motionHighlights,
+            reduceTransparency = reduceTransparency
+        )
+    }
+
+    val baseScheme = createLiquidColorScheme(palette, isDark)
+    val colorScheme = if (resolvedWallpaper == GlassWallpaper.BOTANICAL) {
+        baseScheme
+    } else if (isDark) {
+        baseScheme.copy(
+            onBackground = glassColors.label,
+            surface = glassColors.solidCell,
+            onSurface = glassColors.label,
+            surfaceVariant = glassColors.elevatedCell,
+            onSurfaceVariant = glassColors.label2,
+            outline = glassColors.separator
+        )
+    } else {
+        baseScheme.copy(
+            background = GlassPalette.wallpaperTop(resolvedWallpaper, palette, dark = false),
+            onBackground = glassColors.label,
+            surface = glassColors.solidCell,
+            onSurface = glassColors.label,
+            surfaceVariant = glassColors.elevatedCell,
+            onSurfaceVariant = glassColors.label2,
+            outline = glassColors.separator
+        )
+    }
+    val defaultInk = glassColors.label
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            @Suppress("DEPRECATION")
             window.statusBarColor = Color.Transparent.toArgb()
+            @Suppress("DEPRECATION")
             window.navigationBarColor = Color.Transparent.toArgb()
             val insetsController = WindowCompat.getInsetsController(window, view)
-            // پس‌زمینه گیاهی هر دو حالت روز و شب غنی و پررنگ است؛ آیکون‌های سفید استاتوس‌بار خوانایی کامل دارند.
-            insetsController.isAppearanceLightStatusBars = false
-            insetsController.isAppearanceLightNavigationBars = false
+            val useDarkSystemIcons = !glassColors.darkBackdrop
+            insetsController.isAppearanceLightStatusBars = useDarkSystemIcons
+            insetsController.isAppearanceLightNavigationBars = useDarkSystemIcons
         }
     }
 
     CompositionLocalProvider(
         LocalLiquidPalette provides palette,
-        LocalIsDarkTheme provides isDark
+        LocalIsDarkTheme provides isDark,
+        LocalGlassLook provides glassLook
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

@@ -20,7 +20,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable // 👈 اضافه شد
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -32,10 +37,14 @@ import com.example.data.local.WorkoutPlan
 import com.example.ui.components.LiquidBottomBar
 import com.example.ui.components.LiquidGlassRoot
 import com.example.ui.components.LiquidRestTimerDock
+import com.example.ui.components.LocalLiquidBottomClearance
+import com.example.ui.glass.GlassTopEdge
+import com.example.ui.glass.rememberGlassChrome
 import com.example.ui.navigation.Screen
 import com.example.ui.screens.*
 import com.example.ui.theme.GymTheme
 import com.example.ui.theme.LiquidTheme
+import com.kyant.backdrop.backdrops.layerBackdrop
 import com.example.ui.viewmodel.ActiveWorkoutViewModel
 import com.example.ui.viewmodel.GymViewModel
 import com.example.util.JalaliCalendar
@@ -125,10 +134,19 @@ class MainActivity : ComponentActivity() {
 
             GymTheme(
                 appearanceMode = userSettings.appearanceMode,
-                accentPalette = userSettings.accentPalette
+                accentPalette = userSettings.accentPalette,
+                glassMaterial = userSettings.glassMaterial,
+                glassWallpaper = userSettings.glassWallpaper,
+                glassLists = userSettings.glassLists,
+                shrinkTabBar = userSettings.shrinkTabBar,
+                motionHighlights = userSettings.motionHighlights,
+                reduceTransparency = userSettings.reduceTransparency
             ) {
-                val hazeState = remember { dev.chrisbanes.haze.HazeState() }
-                LiquidGlassRoot(hazeState = hazeState) {
+                val chrome = rememberGlassChrome()
+                LiquidGlassRoot(
+                    chrome = chrome,
+                    motionHighlights = userSettings.motionHighlights
+                ) {
                     // Strictly enforce RTL for Persian language
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                         if (showOnboardingFirstTime || isShowingOnboarding) {
@@ -214,47 +232,49 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         val isImeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                        Scaffold(
-                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            // هر صفحه نوار بالای خودش را با پدینگ status bar دارد؛ پدینگ دوبل نشود
-                            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                            bottomBar = {
-                                if (!isImeVisible) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        // Persistent Rest Timer Dock
-                                        LiquidRestTimerDock(
-                                            remainingSeconds = restRemainingSeconds,
-                                            isActive = isRestTimerActive,
-                                            onAdd15Seconds = { activeWorkoutViewModel.addRestTime(15) },
-                                            onCancel = { activeWorkoutViewModel.cancelRestTimer() },
-                                            onClickDock = {
-                                                if (isWorkoutActive) {
-                                                    currentScreen = "active_workout"
-                                                }
-                                            }
-                                        )
-
-                                        // Floating Liquid Glass Navigation Bar
-                                        LiquidBottomBar(
-                                            currentRoute = screenRoute,
-                                            onNavigate = { currentScreen = it }
-                                        )
+                        var glassMini by rememberSaveable { mutableStateOf(false) }
+                        LaunchedEffect(screenRoute) {
+                            glassMini = false
+                        }
+                        val glassShrink = userSettings.shrinkTabBar
+                        val glassScroll = remember(glassShrink) {
+                            object : NestedScrollConnection {
+                                override fun onPostScroll(
+                                    consumed: Offset,
+                                    available: Offset,
+                                    source: NestedScrollSource
+                                ): Offset {
+                                    if (glassShrink) {
+                                        if (consumed.y < -4f) {
+                                            glassMini = true
+                                        } else if (consumed.y > 4f || available.y > 24f) {
+                                            glassMini = false
+                                        }
                                     }
+                                    return Offset.Zero
                                 }
                             }
-                        ) { innerPadding ->
+                        }
+                        val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                        val bottomClearance = if (isImeVisible) {
+                            16.dp
+                        } else {
+                            navBarBottom + (if (isRestTimerActive) 158.dp else 94.dp)
+                        }
+
+                        Box(modifier = Modifier.fillMaxSize()) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(innerPadding)
+                                    .nestedScroll(glassScroll)
+                                    .layerBackdrop(chrome.page)
                             ) {
-                                Crossfade(
-                                    targetState = screenRoute,
-                                    animationSpec = tween(durationMillis = 150),
-                                    label = "tab_crossfade"
-                                ) { route ->
+                                CompositionLocalProvider(LocalLiquidBottomClearance provides bottomClearance) {
+                                    Crossfade(
+                                        targetState = screenRoute,
+                                        animationSpec = tween(durationMillis = 150),
+                                        label = "tab_crossfade"
+                                    ) { route ->
                                 when (route) {
                                     Screen.Dashboard.route -> {
                                         val todayGregorian = remember { JalaliCalendar.getTodayGregorian() }
@@ -425,10 +445,52 @@ class MainActivity : ComponentActivity() {
                                             onUpdateProfilePhoto = { photo -> gymViewModel.updateProfilePhoto(photo) },
                                             onUpdateSoundSettings = { en, rVol, tVol, remVol ->
                                                 gymViewModel.updateSoundSettings(en, rVol, tVol, remVol)
+                                            },
+                                            onUpdateGlassSettings = { mat, wall, lists, shrink, motion, reduce ->
+                                                gymViewModel.updateGlassSettings(mat, wall, lists, shrink, motion, reduce)
                                             }
                                         )
                                     }
                                 }
+                                    }
+                                }
+                            }
+
+                            GlassTopEdge(
+                                backdrop = chrome.combined,
+                                palette = LiquidTheme.palette,
+                                modifier = Modifier.align(Alignment.TopCenter)
+                            )
+
+                            if (!isImeVisible) {
+                                Column(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                ) {
+                                    LiquidRestTimerDock(
+                                        remainingSeconds = restRemainingSeconds,
+                                        isActive = isRestTimerActive,
+                                        onAdd15Seconds = { activeWorkoutViewModel.addRestTime(15) },
+                                        onCancel = { activeWorkoutViewModel.cancelRestTimer() },
+                                        onClickDock = {
+                                            if (isWorkoutActive) {
+                                                currentScreen = "active_workout"
+                                            }
+                                        },
+                                        backdrop = chrome.combined
+                                    )
+
+                                    LiquidBottomBar(
+                                        currentRoute = screenRoute,
+                                        onNavigate = {
+                                            glassMini = false
+                                            currentScreen = it
+                                        },
+                                        backdrop = chrome.combined,
+                                        minimized = glassMini,
+                                        onExpand = { glassMini = false }
+                                    )
                                 }
                             }
                         }
